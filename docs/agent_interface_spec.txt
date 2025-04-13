@@ -5,8 +5,10 @@ Flow:
 3. User view the plan, adjusts it if needed, and submits for execution.
 4. Agent runs the execution loop
   4.1 Agent updates the UI with the plan status/updates. type="plan"
-  4.2 Agent sends intermediate artifacts to the UI. type="artifact"
-  4.3 Agent sends the final findings to the UI. type="findings"
+  4.2 Agent sends intermediate artifacts to the UI. type="artifact". These are usually rendered 
+      in the Chat window.
+  4.3 Agent sends the final findings to the UI. type="findings". These are usually rendered 
+      in the Report window.
 5. User can stop the execution loop. type="stop"
 6. User can send a new request. - stops any current execution
 7. User can send a new plan. - stops any current execution
