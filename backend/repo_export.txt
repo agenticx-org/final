@@ -1,0 +1,3729 @@
+Okay, here is the entire repository content concatenated into a single file, followed by the Python script to reconstruct it.
+
+**Combined Repository File (`repo_export.txt`)**
+
+```text
+================================================================================
+File: ./.DS_Store
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+00 00 00 01 42 75 64 31 00 00 18 00 00 00 08 00 00 00 18 00 00 00 10 0b 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 11 00 00 00 01 00 00 10 00 49 6c 6f 63 62 6c 6f 62 00 00 00 10
+
+================================================================================
+File: ./config.py
+================================================================================
+
+import os
+from dotenv import load_dotenv
+import logging
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+# --- Anthropic/Bedrock Configuration ---
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") # Used if not using Bedrock
+BEDROCK_AWS_ACCESS_KEY_ID = os.getenv("BEDROCK_AWS_ACCESS_KEY_ID")
+BEDROCK_AWS_SECRET_ACCESS_KEY = os.getenv("BEDROCK_AWS_SECRET_ACCESS_KEY")
+BEDROCK_AWS_REGION = os.getenv("BEDROCK_AWS_REGION", "us-east-1")
+
+MODEL_ID = os.getenv("MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
+
+# Simple check to determine client type (can be more robust)
+USE_BEDROCK = bool(BEDROCK_AWS_ACCESS_KEY_ID and BEDROCK_AWS_SECRET_ACCESS_KEY)
+
+# --- Agent Configuration ---
+RAW_AUTHORIZED_IMPORTS = os.getenv("AUTHORIZED_IMPORTS", "math,random,datetime,json,re,os,pandas,numpy") # Added common data libs
+AUTHORIZED_IMPORTS = [imp.strip() for imp in RAW_AUTHORIZED_IMPORTS.split(',') if imp.strip()]
+CUSTOM_AGENT_FUNCTIONS_MODULE = os.getenv("CUSTOM_AGENT_FUNCTIONS_MODULE", "agent_utils")
+
+# ---> Output Directory Configuration <---
+# Define the directory relative to the project root (where main.py/config.py are)
+AGENT_OUTPUT_DIR_NAME = os.getenv("AGENT_OUTPUT_DIR_NAME", "agent_outputs")
+# Get the absolute path of the project root directory
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+# Construct the full absolute path for the output directory
+AGENT_OUTPUT_DIR = os.path.join(PROJECT_ROOT, AGENT_OUTPUT_DIR_NAME)
+
+# --- Create Output Directory If It Doesn't Exist ---
+try:
+    os.makedirs(AGENT_OUTPUT_DIR, exist_ok=True)
+    logger.info(f"Ensured agent output directory exists: {AGENT_OUTPUT_DIR}")
+except OSError as e:
+    logger.error(f"Could not create agent output directory '{AGENT_OUTPUT_DIR}': {e}", exc_info=True)
+    # Decide if this is a fatal error. For now, log and disable saving.
+    AGENT_OUTPUT_DIR = None
+    AGENT_OUTPUT_DIR_NAME = None
+
+
+# --- Tool Configuration ---
+# Add paths or specific tool configurations if needed
+
+# --- Agent Behavior ---
+STREAM_CHUNK_SIZE = 50 # Characters per websocket message chunk
+
+================================================================================
+File: ./requirements.txt
+================================================================================
+
+fastapi
+uvicorn[standard]
+websockets
+anthropic[bedrock] # Or just 'anthropic' if not using Bedrock
+python-dotenv
+boto3 # Needed for bedrock client
+pydantic >= 2.0 # For alias support etc.
+# Optional, but likely needed by agent tasks
+pandas
+numpy
+matplotlib
+
+================================================================================
+File: ./agent_utils.py
+================================================================================
+
+# ./agent_utils.py
+
+import math
+import logging
+from datetime import datetime
+import random
+import pandas as pd # Example: Make pandas available if listed in config
+import numpy as np # Example: Make numpy available if listed in config
+
+logger = logging.getLogger(__name__) # Use logging if desired within functions
+
+# Example Functions:
+
+def calculate_circle_area(radius: float) -> float:
+    """
+    Calculates the area of a circle given its radius.
+    Args:
+        radius: The radius of the circle (must be non-negative).
+    Returns:
+        The calculated area of the circle.
+    Raises:
+        ValueError: If the radius is negative.
+    """
+    logger.info(f"Calculating area for radius: {radius}")
+    if radius < 0:
+        logger.error("Radius cannot be negative.")
+        raise ValueError("Radius cannot be negative.")
+    return math.pi * (radius ** 2)
+
+def format_timestamp(timestamp: float = None, format_string: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """
+    Formats a given Unix timestamp into a human-readable string.
+    If no timestamp is provided, uses the current time.
+    Args:
+        timestamp: Optional Unix timestamp (float or int). Defaults to current time.
+        format_string: The strftime format string. Defaults to '%Y-%m-%d %H:%M:%S'.
+    Returns:
+        The formatted date and time string.
+    """
+    if timestamp is None:
+        dt_object = datetime.now()
+        logger.info(f"Formatting current time with format: {format_string}")
+    else:
+        try:
+            dt_object = datetime.fromtimestamp(float(timestamp))
+            logger.info(f"Formatting timestamp {timestamp} with format: {format_string}")
+        except ValueError as e:
+            logger.error(f"Invalid timestamp provided: {timestamp}. Error: {e}")
+            raise ValueError(f"Invalid timestamp: {timestamp}") from e
+
+    return dt_object.strftime(format_string)
+
+def simple_string_reverse(text: str) -> str:
+    """
+    Reverses a given string.
+    Args:
+        text: The string to reverse.
+    Returns:
+        The reversed string.
+    """
+    logger.info(f"Reversing string: '{text[:20]}...'")
+    return text[::-1]
+
+def generate_random_dataframe(rows: int = 5, cols: int = 3) -> pd.DataFrame:
+    """
+    Generates a Pandas DataFrame with random numerical data.
+    Args:
+        rows: Number of rows.
+        cols: Number of columns.
+    Returns:
+        A pandas DataFrame.
+    """
+    logger.info(f"Generating random DataFrame with {rows} rows, {cols} columns.")
+    if rows <= 0 or cols <=0:
+        raise ValueError("Number of rows and columns must be positive.")
+    data = np.random.rand(rows, cols)
+    columns = [f'Col_{i+1}' for i in range(cols)]
+    df = pd.DataFrame(data, columns=columns)
+    logger.debug(f"Generated DataFrame:\n{df.head(2)}")
+    return df
+
+
+# Add more functions as needed...
+# def complex_calculation(x: int, y: float, z: str) -> dict:
+#     """Does something complex."""
+#     # ... implementation ...
+#     return {"result": x * y, "info": z}
+
+================================================================================
+File: ./example_usage.py
+================================================================================
+
+import subprocess
+import sys
+import os
+import time
+
+# Ensure the virtual environment is activated or python path includes the project root
+
+PYTHON_EXE = sys.executable # Use the current python interpreter
+
+def run_server():
+    """Starts the FastAPI server using uvicorn."""
+    print("Attempting to start the FastAPI server...")
+    # Get the directory containing this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the path to main.py relative to this script
+    main_py_path = os.path.join(script_dir, "main.py")
+
+    if not os.path.exists(main_py_path):
+        print(f"Error: main.py not found at {main_py_path}")
+        # Try finding main.py assuming example_usage.py is in the root directory
+        # Check if main.py is in the script_dir (common case)
+        print(f"Error: main.py not found at {main_py_path}")
+        print("Please ensure this script is run from the project root directory containing main.py.")
+        sys.exit(1)
+
+    server_cwd = script_dir # Run from the directory containing main.py
+    print(f"Found main.py. Running server from: {server_cwd}")
+
+    # Command to run uvicorn. Assumes main.py has app = FastAPI() instance named 'app'
+    command = [
+        PYTHON_EXE,
+        "-m",
+        "uvicorn",
+        "main:app",  # Assumes main.py and app instance named 'app'
+        "--host", "0.0.0.0", # Listen on all interfaces
+        "--port", "8000",
+        "--reload" # Use reload for development (watches for file changes)
+    ]
+
+    print(f"Executing command: {' '.join(command)}")
+    print(f"Working directory: {server_cwd}")
+    print("-" * 30)
+    print("Server starting...")
+    print("Access the UI at: http://localhost:8000 or http://<your-ip>:8000")
+    print("Press Ctrl+C in this terminal to stop the server.")
+    print("-" * 30)
+
+    process = None # Initialize process variable
+    try:
+        # Run uvicorn as a subprocess in the correct directory
+        process = subprocess.Popen(command, cwd=server_cwd)
+        # Wait for the process to complete (e.g., user presses Ctrl+C)
+        process.wait()
+    except KeyboardInterrupt:
+        print("\nServer stop requested by user (Ctrl+C)...")
+        if process:
+            process.terminate() # Ask nicely first
+            try:
+                process.wait(timeout=5) # Wait up to 5 seconds
+                print("Server process terminated gracefully.")
+            except subprocess.TimeoutExpired:
+                print("Server process did not terminate gracefully, killing.")
+                process.kill() # Force kill if necessary
+                process.wait()
+                print("Server process killed.")
+    except Exception as e:
+        print(f"\nAn error occurred while running the server: {e}")
+        if process:
+            print("Attempting to kill server process due to error.")
+            process.kill()
+            process.wait()
+            print("Server process killed.")
+    finally:
+        print("Server shutdown complete.")
+
+
+if __name__ == "__main__":
+    run_server()
+
+================================================================================
+File: ./file_exporter.py
+================================================================================
+
+import os
+import mimetypes
+import argparse # For command-line arguments
+
+def is_text_file(file_path):
+    """
+    Determine if a file is likely a text file based on its mime type and content.
+    Handles potential file reading errors.
+    """
+    try:
+        # Check mime type first
+        mime_type, encoding = mimetypes.guess_type(file_path)
+        if mime_type and 'text' in mime_type:
+            return True
+        # Some common text types might not be guessed as 'text/'
+        if mime_type in ['application/json', 'application/xml', 'application/javascript', 'application/csv']:
+            return True
+
+        # If mime type is inconclusive, try reading as text
+        with open(file_path, 'r', encoding=encoding or 'utf-8', errors='ignore') as f:
+            f.read(1024)  # Try reading first 1KB
+        return True
+    except (IOError, UnicodeDecodeError):
+        # If reading fails or it's not valid text, assume binary
+        return False
+    except Exception as e:
+        print(f"[Warning] Error checking file type for {file_path}: {e}")
+        return False # Assume binary on other errors
+
+
+def export_files(output_file='repo_export.txt', root_dir='.', exclude_dirs=None, exclude_files=None):
+    """
+    Read all files in the specified directory and subdirectories, appending
+    their contents to the output_file using the specified format.
+    Excludes specified directories and files.
+    """
+    if exclude_dirs is None:
+        exclude_dirs = {'.git', '__pycache__', '.vscode', '.idea', 'venv', '.env', 'node_modules', 'agent_outputs'}
+    else:
+        exclude_dirs = set(exclude_dirs)
+
+    if exclude_files is None:
+        exclude_files = {output_file, '.DS_Store'} # Exclude the output file itself and .DS_Store
+    else:
+        exclude_files = set(exclude_files)
+        exclude_files.add(output_file) # Always exclude output file
+        exclude_files.add('.DS_Store') # Always exclude .DS_Store
+
+    print(f"Starting export to '{output_file}' from directory '{root_dir}'...")
+    print(f"Excluding directories: {exclude_dirs}")
+    print(f"Excluding files: {exclude_files}")
+
+    count = 0
+    with open(output_file, 'w', encoding='utf-8') as out_f:
+        for current_root, dirs, files in os.walk(root_dir, topdown=True):
+            # Modify dirs in-place to exclude specified directories
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+
+            # Normalize current_root path for comparison
+            normalized_root = os.path.normpath(current_root)
+
+            for file in files:
+                if file in exclude_files:
+                    continue
+
+                file_path_abs = os.path.join(normalized_root, file)
+                # Create relative path from the starting root_dir
+                file_path_rel = os.path.relpath(file_path_abs, start=root_dir)
+                # Ensure consistent path separators (Unix-style)
+                file_path_rel_unix = file_path_rel.replace(os.path.sep, '/')
+                # Add './' prefix for consistency with the requested format
+                if not file_path_rel_unix.startswith('.'):
+                     file_path_rel_unix = './' + file_path_rel_unix
+
+
+                # Write file path header
+                out_f.write(f"{'='*80}\n")
+                out_f.write(f"File: {file_path_rel_unix}\n")
+                out_f.write(f"{'='*80}\n\n")
+
+                try:
+                    # Handle text files
+                    if is_text_file(file_path_abs):
+                        with open(file_path_abs, 'r', encoding='utf-8', errors='ignore') as f:
+                            out_f.write(f.read())
+                    # Handle binary files
+                    else:
+                        with open(file_path_abs, 'rb') as f:
+                            out_f.write(f"[Binary file, first 100 bytes shown as hex]\n")
+                            hex_content = f.read(100).hex()
+                            # Format hex content (groups of two, space separated)
+                            formatted_hex = ' '.join(hex_content[i:i+2] for i in range(0, len(hex_content), 2))
+                            out_f.write(formatted_hex)
+                    out_f.write('\n\n') # Add extra newline for separation
+                    count += 1
+                except Exception as e:
+                    print(f"[Error] Could not read file {file_path_abs}: {e}")
+                    out_f.write(f"[Error reading file: {str(e)}]\n\n")
+
+    print(f"Export complete. {count} files written to '{output_file}'.")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Concatenate repository files into a single export file.")
+    parser.add_argument(
+        "-o", "--output",
+        default="repo_export.txt",
+        help="Name of the output file (default: repo_export.txt)"
+    )
+    parser.add_argument(
+        "-d", "--dir",
+        default=".",
+        help="Root directory to export from (default: current directory)"
+    )
+    parser.add_argument(
+        "--exclude-dir",
+        action='append',
+        default=['.git', '__pycache__', '.vscode', '.idea', 'venv', '.env', 'node_modules', 'agent_outputs'], # Default excludes
+        help="Directory name to exclude (can be used multiple times)"
+    )
+    parser.add_argument(
+        "--exclude-file",
+        action='append',
+        default=['.DS_Store'], # Default excludes
+        help="File name to exclude (can be used multiple times)"
+    )
+    args = parser.parse_args()
+
+    # Pass unique set of excludes
+    export_files(
+        output_file=args.output,
+        root_dir=args.dir,
+        exclude_dirs=set(args.exclude_dir),
+        exclude_files=set(args.exclude_file)
+    )
+
+================================================================================
+File: ./schemas.py
+================================================================================
+
+from pydantic import BaseModel, Field
+from typing import Literal, Any, Optional, Union
+
+# --- User -> Agent ---
+
+RequestType = Literal["request", "plan_confirmation", "stop"]
+
+class UserRequest(BaseModel):
+    """Schema for messages sent FROM the UI TO the Agent."""
+    session_id: Optional[str] = None # Optional, but good practice
+    type: RequestType
+    role: Literal["user"] = "user"
+    content: Optional[str] = None # Content is the task for 'request', plan for 'plan_confirmation', null/empty for 'stop'
+
+# --- Agent -> UI ---
+
+ResponseType = Literal["plan", "artifact", "findings"]
+# Allow standard MIME types and specific shorthands from spec
+ContentType = Literal[
+    "md", "jsx", "image/png", "image/jpg", "image/jpeg", "image/gif", "image/svg+xml",
+    "text/plain", "text/html", "text/css", "text/javascript", "text/csv",
+    "application/json", "application/pdf",
+    "application/vnd.agent.error+json", # Custom type for structured errors
+    "text" # Generic text fallback from spec example
+]
+
+class AgentResponse(BaseModel):
+    """
+    Schema for messages streamed FROM the Agent TO the UI.
+    Sent in chunks.
+    """
+    type: ResponseType
+    content_type: ContentType = Field(alias="content/type") # Handle slash in key name
+    role: Literal["assistant"] = "assistant"
+    content: str # Chunk of the content stream
+    command: Optional[Literal["stop"]] = None # Signals the end of a stream for a specific type
+
+    class Config:
+        allow_population_by_field_name = True # Allows using 'content_type' in code
+        # Pydantic v2 uses model_config
+        # model_config = {
+        #     "populate_by_name": True,
+        # }
+
+
+================================================================================
+File: ./random_image.png
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 01 f4 00 00 01 f4 08 06 00 00 00 cb d6 df 8a 00 00 00 3a 74 45 58 74 53 6f 66 74 77 61 72 65 00 4d 61 74 70 6c 6f 74 6c 69 62 20 76 65 72 73 69 6f 6e 33 2e 31 30 2e 31 2c 20 68 74 74 70 73 3a 2f 2f 6d 61 74 70 6c 6f 74 6c 69 62 2e 6f 72 67 2f 73
+
+================================================================================
+File: ./main.py
+================================================================================
+
+import logging
+import uvicorn
+import json
+import asyncio
+import os
+from pathlib import Path
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from starlette.websockets import WebSocketState
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from typing import Dict, Optional
+from contextlib import suppress # For suppressing errors on websocket close
+
+import config # Project configuration
+from agent.agent import Agent
+from schemas import UserRequest, AgentResponse # Import new schemas
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+app = FastAPI()
+
+# Mount static files (HTML, CSS, JS) - ONLY ONCE
+app.mount("/static", StaticFiles(directory="static"), name="static")
+# Mount agent outputs directory
+if config.AGENT_OUTPUT_DIR and os.path.exists(config.AGENT_OUTPUT_DIR):
+    logger.info(f"Mounting output directory: /outputs -> {config.AGENT_OUTPUT_DIR}")
+    app.mount("/outputs", StaticFiles(directory=config.AGENT_OUTPUT_DIR), name="outputs")
+else:
+    logger.warning(f"Agent output directory '{config.AGENT_OUTPUT_DIR}' not found or not configured. /outputs endpoint will not serve files.")
+
+
+@app.get("/")
+async def get_root():
+    """Serves the main HTML page."""
+    static_dir = Path("static")
+    index_file = static_dir / "index.html"
+    if not index_file.is_file():
+        logger.error("static/index.html not found!")
+        raise HTTPException(status_code=404, detail="index.html not found")
+    return FileResponse(index_file)
+
+# Store active agents per connection (using WebSocket object as key for simplicity)
+# For multi-tab/multi-session support, a session_id mapping would be needed.
+active_agents: Dict[WebSocket, Agent] = {}
+
+async def send_error_to_client(websocket: WebSocket, error_message: str, details: Optional[str] = "Invalid request or server state."):
+    """Sends a structured error artifact message to the client."""
+    if websocket.application_state != WebSocketState.CONNECTED:
+        logger.warning("Cannot send error, websocket not connected.")
+        return
+    try:
+        error_content = json.dumps({"error": error_message, "details": details})
+        error_resp = AgentResponse(
+            type="artifact",
+            content_type="application/vnd.agent.error+json",
+            content=error_content,
+            command="stop" # Error is a single message
+        )
+        # Use model_dump_json to handle alias 'content/type' correctly
+        await websocket.send_text(error_resp.model_dump_json(by_alias=True))
+    except Exception as e:
+        logger.error(f"Failed to send error message to client: {e}")
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    client_host = websocket.client.host
+    client_port = websocket.client.port
+    logger.info(f"WebSocket accepted from {client_host}:{client_port}")
+    session_id: Optional[str] = None # Store session ID if provided
+
+    try:
+        while websocket.application_state == WebSocketState.CONNECTED:
+            try:
+                message_data = await websocket.receive_json()
+                logger.debug(f"Received raw JSON: {message_data}")
+
+                # Validate incoming message using Pydantic
+                try:
+                    user_request = UserRequest.model_validate(message_data)
+                    session_id = user_request.session_id # Store session_id
+                    logger.info(f"Received valid request: type='{user_request.type}', session='{session_id or 'N/A'}'")
+                except Exception as e:
+                    logger.error(f"Invalid UserRequest format: {e}. Data: {message_data}")
+                    await send_error_to_client(websocket, f"Invalid message format: {e}", str(message_data))
+                    continue # Wait for next message
+
+                # --- Handle different request types ---
+                request_type = user_request.type
+                content = user_request.content
+
+                agent_instance: Optional[Agent] = active_agents.get(websocket)
+
+                if request_type == "request":
+                    if agent_instance and agent_instance.stage not in ["stopped", "done", "error"]:
+                        logger.warning(f"New request received while agent active (stage={agent_instance.stage}). Stopping previous agent.")
+                        await agent_instance.stop() # Tell the agent to stop
+                        # Give a moment for stop to process?
+                        await asyncio.sleep(0.1)
+                        with suppress(KeyError): # Handle race condition if agent cleans itself up
+                            if active_agents.get(websocket) == agent_instance: # Check if it's still the same agent
+                                del active_agents[websocket]
+                        agent_instance = None # Ensure we create a new one
+
+                    task = str(content) if content else None
+                    if not task:
+                        logger.error("Received 'request' type with no content.")
+                        await send_error_to_client(websocket, "Task content cannot be empty for 'request' type.")
+                        continue
+
+                    logger.info(f"Starting new agent for task: {task[:100]}...")
+                    try:
+                        new_agent = Agent(task=task, websocket=websocket) # Pass websocket for communication
+                        active_agents[websocket] = new_agent
+                        logger.info("Agent created. Generating initial plan...")
+                        # Start plan generation (runs asynchronously)
+                        asyncio.create_task(new_agent.generate_initial_plan())
+                    except Exception as e:
+                        logger.error(f"Agent initialization failed: {e}", exc_info=True)
+                        await send_error_to_client(websocket, f"Agent initialization failed: {e}", "Server error during agent setup.")
+                        # Don't break, allow user to try again maybe
+                        continue
+
+                elif request_type == "plan_confirmation":
+                    if not agent_instance:
+                        logger.warning("Received 'plan_confirmation' but no active agent found.")
+                        await send_error_to_client(websocket, "No active agent session found to confirm plan.")
+                        continue
+
+                    confirmed_plan = str(content) if content else None
+                    if not confirmed_plan:
+                        logger.error("Received 'plan_confirmation' with no content.")
+                        await send_error_to_client(websocket, "Plan content cannot be empty for 'plan_confirmation'.")
+                        continue
+
+                    if agent_instance.stage == "waiting_for_plan_confirmation":
+                        logger.info("Plan confirmation received. Starting agent execution.")
+                        # Start execution (runs asynchronously)
+                        asyncio.create_task(agent_instance.confirm_plan_and_start(confirmed_plan))
+                    else:
+                        logger.warning(f"Received 'plan_confirmation' at unexpected agent stage: {agent_instance.stage}")
+                        await send_error_to_client(websocket, f"Cannot confirm plan at this stage ({agent_instance.stage}). Agent might be busy or finished.")
+                        continue
+
+                elif request_type == "stop":
+                    if agent_instance:
+                         if agent_instance.stage not in ["stopping", "stopped", "done", "error"]:
+                            logger.info(f"Received 'stop' request for active agent (stage={agent_instance.stage}). Initiating stop.")
+                            await agent_instance.stop()
+                            # Agent cleanup happens in its own flow or finally block
+                         else:
+                             logger.info(f"Received 'stop' request but agent is already in terminal state ({agent_instance.stage}). Ignoring.")
+                    else:
+                        logger.info("Received 'stop' request but no active agent found.")
+                        # Optionally send an 'ack' or ignore
+                        pass # Nothing to stop
+
+                else:
+                    # Should not happen if Pydantic validation works, but belt-and-suspenders
+                    logger.warning(f"Unhandled valid request type: '{request_type}'.")
+                    await send_error_to_client(websocket, f"Server received unhandled request type: {request_type}")
+
+            except WebSocketDisconnect:
+                 logger.info(f"WebSocket disconnected by client {client_host}:{client_port} (code: {websocket.close_code})")
+                 break # Exit the receive loop
+            except json.JSONDecodeError as e:
+                 logger.error(f"Invalid JSON received from {client_host}:{client_port}: {e}")
+                 await send_error_to_client(websocket, "Invalid JSON format received.", str(e))
+                 # Continue listening for a valid message
+            except RuntimeError as e:
+                 # Handles cases like trying to receive on a closing socket
+                 if "receive" in str(e).lower() and ("websocket is closing" in str(e).lower() or "connection is closed" in str(e).lower()):
+                     logger.warning(f"WebSocket closing or closed during receive from {client_host}:{client_port}: {e}")
+                 else:
+                     logger.error(f"Runtime error in WebSocket loop for {client_host}:{client_port}: {e}", exc_info=True)
+                 break # Exit loop on runtime errors
+            except Exception as e:
+                 logger.error(f"Unexpected error in WebSocket loop for {client_host}:{client_port}: {e}", exc_info=True)
+                 # Attempt to send error before breaking
+                 with suppress(Exception): # Avoid error loops if sending fails
+                     await send_error_to_client(websocket, f"An unexpected server error occurred: {e}")
+                 break # Exit loop on unexpected errors
+
+    except Exception as e:
+        # Catch errors during the initial accept or unexpected outer loop errors
+        logger.error(f"Fatal error in WebSocket handler for {client_host}:{client_port}: {e}", exc_info=True)
+
+    finally:
+        logger.info(f"Cleaning up connection for {client_host}:{client_port}")
+        agent = active_agents.pop(websocket, None)
+        if agent:
+            # Check agent stage before logging
+            logger.info(f"Stopping and cleaning up agent (stage={agent.stage}) for disconnected client {client_host}:{client_port}.")
+            # Ensure agent stops its tasks if it hasn't already
+            if agent.stage not in ["stopped", "done", "error"]:
+                await agent.stop()
+            # Optional: wait briefly for agent cleanup if needed, but stop() should handle it
+            # await asyncio.sleep(0.1)
+        else:
+            logger.info(f"No active agent found for {client_host}:{client_port} during cleanup.")
+
+        # Gracefully close the WebSocket connection if it's still open
+        if websocket.application_state != WebSocketState.DISCONNECTED:
+            with suppress(RuntimeError, asyncio.CancelledError): # Suppress errors if already closing/closed or task cancelled
+                await websocket.close()
+                logger.info(f"WebSocket connection explicitly closed for {client_host}:{client_port}.")
+        else:
+            logger.info(f"WebSocket connection already closed for {client_host}:{client_port}.")
+
+
+# --- Uvicorn Runner ---
+if __name__ == "__main__":
+    logger.info("Starting Agentic Platform V2 server...")
+    # Use reload=True for development, False for production
+    # Ensure config is loaded before starting Uvicorn if it affects server setup
+    if not config.AGENT_OUTPUT_DIR:
+        logger.warning("Agent output directory is not configured. File saving/serving might not work.")
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
+
+
+================================================================================
+File: ./random_scatter_plot.png
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 03 20 00 00 02 58 08 06 00 00 00 9a 76 82 70 00 00 00 3a 74 45 58 74 53 6f 66 74 77 61 72 65 00 4d 61 74 70 6c 6f 74 6c 69 62 20 76 65 72 73 69 6f 6e 33 2e 31 30 2e 31 2c 20 68 74 74 70 73 3a 2f 2f 6d 61 74 70 6c 6f 74 6c 69 62 2e 6f 72 67 2f 73
+
+================================================================================
+File: ./agent_outputs/hello_world.txt
+================================================================================
+
+Hello, World!
+
+================================================================================
+File: ./agent_outputs/simple_svg.svg
+================================================================================
+
+<svg height="100" width="100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red" />
+  Sorry, your browser does not support inline SVG.
+</svg>
+
+
+================================================================================
+File: ./agent_outputs/hello_world_1.html
+================================================================================
+
+<html>
+<body>
+<h1>Hello, World!</h1>
+</body>
+</html>
+
+================================================================================
+File: ./agent_outputs/greeting.txt
+================================================================================
+
+Hello Agent World!
+
+================================================================================
+File: ./agent_outputs/hello_world_2.html
+================================================================================
+
+Hello, world!
+
+================================================================================
+File: ./agent_outputs/hello_world.html
+================================================================================
+
+<html>
+<body>
+<h1>Hello, World!</h1>
+</body>
+</html>
+
+================================================================================
+File: ./tools/builtins.py
+================================================================================
+
+import logging
+from typing import Dict, Any, TYPE_CHECKING
+if TYPE_CHECKING:
+    from agent.state_manager import StateManager
+    from agent.code_executor import CodeExecutor
+
+logger = logging.getLogger(__name__)
+
+# --- Tool Implementations ---
+
+def execute_python_impl(code_executor: 'CodeExecutor', state_manager: 'StateManager', code: str) -> Dict[str, Any]:
+    """
+    Implementation for the 'execute_python' tool.
+    Executes code, updates state, returns stdout/error.
+    """
+    logger.info("Executing python code via tool.")
+    # Make sure executor has the latest globals from state manager
+    current_globals = state_manager.get_globals()
+    code_executor.globals_locals = current_globals # Sync before execution
+
+    result = code_executor.execute(code)
+
+    # Update the main state's execution globals with any changes from this run
+    if result.get("updated_globals"):
+        # Filter out builtins unless they were actually changed (less noise)
+        updates_to_apply = result["updated_globals"]
+        # if '__builtins__' in updates_to_apply and updates_to_apply['__builtins__'] == current_globals.get('__builtins__'):
+        #     del updates_to_apply['__builtins__'] # Avoid saving unchanged builtins
+
+        state_manager.update_globals(updates_to_apply)
+
+    # Return structured stdout and error
+    return {
+        "stdout": result.get("stdout", ""), # Ensure defaults
+        "error": result.get("error", None)
+    }
+
+def update_plan_impl(state_manager: 'StateManager', plan_markdown: str) -> str:
+    """Implementation for the 'update_plan' tool."""
+    logger.info("Updating plan via tool.")
+    state_manager.update_plan(plan_markdown)
+    return "Plan updated successfully." # Return simple confirmation
+
+def record_findings_impl(state_manager: 'StateManager', findings_markdown: str) -> str:
+    """Implementation for the 'record_findings' tool."""
+    logger.info("Recording findings via tool.")
+    state_manager.update_findings(findings_markdown)
+    return "Findings recorded successfully."
+
+def final_answer_impl(state_manager: 'StateManager', result: str) -> str:
+    """Implementation for the 'final_answer' tool."""
+    logger.info(f"Final answer received via tool: {result}")
+    state_manager.set_done(result)
+    # Return the answer itself as confirmation
+    return result
+
+================================================================================
+File: ./tools/custom_tools.py
+================================================================================
+
+import logging
+import random
+import os
+import re
+import mimetypes
+import config
+from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
+
+MAX_RENDER_SIZE_BYTES = 10 * 1024 # 10 KB limit for inline rendering via save_file tool
+
+# Define renderable types (adjust as needed)
+RENDERABLE_TEXT_EXTENSIONS = {'.txt', '.md', '.py', '.js', '.css', '.json', '.csv', '.log', '.xml', '.yaml', '.yml', '.html', '.htm', '.svg'}
+# Separate Image types might be useful if frontend can render them from data URLs later
+# RENDERABLE_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+
+def _sanitize_filename(filename: str) -> str:
+    """Removes potentially dangerous characters and path elements."""
+    if not isinstance(filename, str): filename = "invalid_filename"
+    # Remove path separators and control characters
+    filename = re.sub(r'[\\/:\x00-\x1f]', '', filename)
+    # Replace other potentially problematic chars
+    filename = re.sub(r'[<>:"|?*]', '_', filename)
+    # Replace multiple dots with single dot
+    filename = re.sub(r'\.+', '.', filename)
+    # Replace whitespace with underscore
+    filename = re.sub(r'\s+', '_', filename)
+    # Remove leading/trailing dots, underscores, spaces
+    filename = filename.strip('._ ')
+    # Ensure filename is not empty
+    if not filename: filename = "unnamed_file"
+    # Limit length? e.g., filename = filename[:100]
+    return filename
+
+
+def save_file(filename: str, content: str) -> Dict[str, Any]:
+    """
+    Saves TEXT content to a file in the agent output directory.
+    Designed for text generated/held by the LLM. For files generated by
+    Python code (e.g., plots, dataframes), use execute_python and print
+    the `PRINTED_OUTPUT_FILE:` line.
+
+    Returns a dictionary containing:
+    - status: 'success' or 'error'
+    - message: User-friendly status message.
+    - filepath: Relative path (e.g., 'agent_outputs/report.txt') if successful.
+    - filename: The sanitized filename used.
+    - content_type: Detected MIME type.
+    - size_bytes: Size of the saved content.
+    - inline_content: The content itself, IF it's text-based and below size limit.
+    """
+    output_dir = config.AGENT_OUTPUT_DIR
+    output_dir_name = config.AGENT_OUTPUT_DIR_NAME
+
+    if not output_dir or not output_dir_name:
+        errmsg = "Agent output directory is not configured on the server."
+        logger.error(errmsg)
+        return {"status": "error", "message": errmsg}
+    if not isinstance(filename, str) or not filename:
+        errmsg = "Invalid or empty filename provided."
+        logger.error(errmsg)
+        return {"status": "error", "message": errmsg}
+    # This tool is primarily for text content.
+    if not isinstance(content, str):
+        errmsg = "Invalid content: 'save_file' tool currently only supports saving string content."
+        logger.error(errmsg + f" Type received: {type(content)}")
+        return {"status": "error", "message": errmsg}
+
+    safe_filename = _sanitize_filename(filename)
+    absolute_filepath = os.path.join(output_dir, safe_filename)
+    # Construct relative path string based on the configured output directory name
+    relative_filepath = f"{output_dir_name}/{safe_filename}"
+
+    logger.info(f"Attempting to save file via 'save_file' tool: '{safe_filename}'")
+
+    try:
+        content_bytes = content.encode('utf-8')
+        content_size = len(content_bytes)
+
+        with open(absolute_filepath, 'wb') as f: # Write as bytes
+            f.write(content_bytes)
+
+        logger.info(f"Successfully saved file: {absolute_filepath} ({content_size} bytes)")
+
+        # Determine file type and renderability
+        mime_type, _ = mimetypes.guess_type(safe_filename)
+        mime_type = mime_type or "text/plain" # Default to text
+        _, extension = os.path.splitext(safe_filename)
+        extension = extension.lower()
+
+        # Check if the file extension suggests it's a text-based format we can render
+        # and if its size is within the limit
+        is_renderable_type = extension in RENDERABLE_TEXT_EXTENSIONS or mime_type.startswith('text/') or mime_type == 'application/json' or mime_type == 'image/svg+xml'
+        can_render_inline = is_renderable_type and (content_size <= MAX_RENDER_SIZE_BYTES)
+        inline_content = content if can_render_inline else None
+
+        # Special case: if it's SVG, always try to include inline content if small enough
+        # as the UI might handle it directly.
+        if mime_type == 'image/svg+xml' and content_size <= MAX_RENDER_SIZE_BYTES:
+             inline_content = content # Override if needed
+
+        return {
+            "status": "success",
+            "message": f"File saved successfully as '{safe_filename}'.",
+            "filepath": relative_filepath,
+            "filename": safe_filename,
+            "content_type": mime_type,
+            "size_bytes": content_size,
+            "inline_content": inline_content # Content only included if renderable inline
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to save file '{absolute_filepath}' via 'save_file' tool: {e}", exc_info=True)
+        return {"status": "error", "message": f"Server failed to save file: {e}"}
+
+
+def search(query: str) -> str:
+    """
+    Simulates a web search for a given query.
+    In a real application, this would call a search API (Google, Bing, DuckDuckGo, etc.).
+    Returns a formatted string of search results or a 'no results' message.
+    """
+    logger.info(f"Executing dummy search tool with query: '{query}'")
+    # Simulate search results
+    results = []
+    query_lower = query.lower()
+    if "australian economy" in query_lower:
+        results.append("Result 1: Reserve Bank of Australia (RBA) - Official statistics...")
+        results.append("Result 2: Australian Bureau of Statistics (ABS) - Key Economic Indicators...")
+        results.append("Result 3: Treasury.gov.au - Economic Outlook...")
+        if "cpi" in query_lower:
+             results.append("Result 4: ABS - Consumer Price Index Data Series...")
+        if "money supply" in query_lower:
+             results.append("Result 5: RBA - Money Aggregates and Credit Statistics...")
+    elif "python libraries" in query_lower:
+        results.append("Result 1: Pandas - Powerful data analysis library.")
+        results.append("Result 2: NumPy - Foundational package for numerical computation.")
+        results.append("Result 3: Matplotlib - Comprehensive library for static, animated, and interactive visualizations.")
+    else:
+        # Simulate finding fewer results for less specific queries
+         if random.random() > 0.3: # 70% chance of some results
+             results.append(f"Simulated Result A for '{query}' - from example.com")
+             if random.random() > 0.5:
+                  results.append(f"Simulated Result B for '{query}' - from search-engine.org")
+
+    if not results:
+        return f"No relevant search results found for query: '{query}'"
+    else:
+        # Format results clearly for the LLM
+        output = f"Search results for query: '{query}'\n\n"
+        for i, res in enumerate(results):
+             output += f"{i+1}. {res}\n"
+        return output.strip()
+
+================================================================================
+File: ./tools/__pycache__/custom_tools.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 65 a9 f7 67 81 0f 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 f3 c4 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 01 6c 02 5a 02 64 00 64 01 6c 03 5a 03 64 00 64 01 6c 04 5a 04 64 00 64 01 6c 05 5a 05 64 00 64 02 6c 06 6d 07
+
+================================================================================
+File: ./tools/__pycache__/builtins.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 6b f0 e9 67 5e 08 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 0a 00 00 00 00 00 00 00 f3 ca 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 02 6c 01 6d 02 5a 02 6d 03 5a 03 01 00 64 00 64 03 6c 01 6d 04 5a 04 01 00 65 04 72 0c 64 00 64 04 6c 05 6d 06 5a 06 01 00 64 00 64 05
+
+================================================================================
+File: ./agent/tool_manager.py
+================================================================================
+
+import logging
+import inspect
+import json
+from typing import Dict, Any, List, Callable, Optional
+from typing import TYPE_CHECKING
+import config
+from tools import builtins as builtin_tools
+from tools import custom_tools
+
+if TYPE_CHECKING:
+    from .state_manager import StateManager
+    from .code_executor import CodeExecutor
+
+logger = logging.getLogger(__name__)
+
+class ToolManager:
+    """Manages tool definitions, schemas, and execution mapping for the Anthropic API."""
+
+    def __init__(self, state_manager: 'StateManager', code_executor: 'CodeExecutor', allowed_imports: List[str]):
+        self.state_manager = state_manager
+        self.code_executor = code_executor
+        self.allowed_imports = allowed_imports
+        self._tools: Dict[str, Callable] = {}
+        self._tool_definitions: List[Dict[str, Any]] = []
+        self._load_tools()
+        self._generate_tool_definitions()
+        logger.info(f"ToolManager initialized with tools: {list(self._tools.keys())}")
+
+    def _load_tools(self):
+        """Loads tool implementation functions from specified modules."""
+        self._tools["execute_python"] = builtin_tools.execute_python_impl
+        self._tools["update_plan"] = builtin_tools.update_plan_impl
+        self._tools["record_findings"] = builtin_tools.record_findings_impl
+        self._tools["final_answer"] = builtin_tools.final_answer_impl
+
+        for name, func in inspect.getmembers(custom_tools, inspect.isfunction):
+            if not name.startswith("_"):
+                # Avoid overwriting builtins if custom tool has same name
+                if name in self._tools:
+                     logger.warning(f"Custom tool '{name}' conflicts with a built-in tool name. Custom tool ignored.")
+                else:
+                    self._tools[name] = func
+                    logger.debug(f"Loaded custom tool: {name}")
+
+    def _generate_tool_definitions(self):
+        """Generates the tool definitions list in Anthropic's required JSON schema format."""
+        definitions = []
+        loaded_tool_names = set() # Keep track to avoid duplicates from manual + custom
+
+        # --- Manually define schemas for built-in tools ---
+        definitions.append({
+            "name": "execute_python",
+            "description": f"Executes a snippet of Python code. State (variables, imports) persists between calls. Use print() for output. Allowed imports: {', '.join(self.allowed_imports) or 'None'}. See prompt for file saving instructions (using AGENT_OUTPUT_DIR and PRINTED_OUTPUT_FILE).",
+            "input_schema": {
+                "type": "object",
+                "properties": {"code": {"type": "string", "description": "The Python code string to execute."}},
+                "required": ["code"]
+            }
+        })
+        loaded_tool_names.add("execute_python")
+
+        definitions.append({
+            "name": "update_plan",
+            "description": "Updates the agent's plan with the provided Markdown checklist. Use this at the start of each reasoning step if the plan needs adjustment, or to mark steps complete.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"plan_markdown": {"type": "string", "description": "The complete, updated plan in Markdown format (using checklists like - [ ] or - [x])."}},
+                "required": ["plan_markdown"]
+            }
+        })
+        loaded_tool_names.add("update_plan")
+
+        definitions.append({
+            "name": "record_findings",
+            "description": "Records significant findings, results, or conclusions in Markdown format. Call this whenever key information is discovered, before the final_answer.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"findings_markdown": {"type": "string", "description": "The summary of findings in Markdown format to be appended or used in the final report."}},
+                "required": ["findings_markdown"]
+            }
+        })
+        loaded_tool_names.add("record_findings")
+
+        definitions.append({
+            "name": "final_answer",
+            "description": "Provides the final answer or result for the user's task and concludes the operation successfully.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"result": {"type": "string", "description": "The final textual answer or summary result for the user."}},
+                "required": ["result"]
+            }
+        })
+        loaded_tool_names.add("final_answer")
+
+        # --- Schemas for custom tools (like search, save_file) ---
+        for name, func in self._tools.items():
+            # Skip already defined built-ins
+            if name in loaded_tool_names:
+                 continue
+
+            try:
+                docstring = inspect.getdoc(func) or f"Executes the {name} tool."
+                sig = inspect.signature(func)
+                properties = {}
+                required = []
+
+                description = docstring.split('\n')[0] # First line of docstring
+                if name == 'save_file':
+                    # Include output dir name in description for clarity
+                    output_dir_name = config.AGENT_OUTPUT_DIR_NAME or "the configured output directory"
+                    description = f"Saves text content to a specified filename in the '{output_dir_name}' directory. Returns status and file info. Use this for text generated by the LLM, not files from Python code."
+
+                for param_name, param in sig.parameters.items():
+                    # Basic type mapping
+                    param_type = "string" # Default
+                    if param.annotation == int: param_type = "integer"
+                    elif param.annotation == float: param_type = "number"
+                    elif param.annotation == bool: param_type = "boolean"
+                    # More complex types default to string for schema simplicity,
+                    # but could be refined if needed (e.g., object, array).
+                    elif param.annotation == list: param_type = "array"
+                    elif param.annotation == dict: param_type = "object"
+                    else: param_type = "string"
+
+
+                    param_description = f"Parameter '{param_name}'" # Generic description
+                    # Add specific descriptions if useful from docstring parsing or manually
+                    # Example: Extract from docstring if formatted correctly (e.g., Args section)
+                    # (This requires more sophisticated docstring parsing)
+
+                    # Manual overrides for known tools:
+                    if name == 'save_file':
+                        if param_name == 'filename': param_description = "The desired filename (e.g., 'report.md'). Path separators will be removed."
+                        if param_name == 'content': param_description = "The text content to save as a string."
+                    elif name == 'search':
+                        if param_name == 'query': param_description = "The search query string."
+
+                    properties[param_name] = {"type": param_type, "description": param_description}
+                    if param.default == inspect.Parameter.empty:
+                        required.append(param_name)
+
+                definitions.append({
+                    "name": name,
+                    "description": description,
+                    "input_schema": {"type": "object", "properties": properties, "required": required}
+                })
+                logger.debug(f"Generated definition for custom tool: {name}")
+                loaded_tool_names.add(name)
+
+            except Exception as e:
+                 logger.error(f"Failed to generate schema for custom tool '{name}': {e}", exc_info=True)
+
+
+        self._tool_definitions = definitions
+
+    def get_tool_definitions(self) -> List[Dict[str, Any]]:
+        """Returns the list of tool definitions for the Anthropic API."""
+        return self._tool_definitions
+
+    def get_tool_function(self, tool_name: str) -> Optional[Callable]:
+        """Gets the callable function for a given tool name."""
+        return self._tools.get(tool_name)
+
+    def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
+        """Finds and executes the appropriate tool implementation."""
+        tool_function = self.get_tool_function(tool_name)
+        if not tool_function:
+            error_msg = f"Error: Tool '{tool_name}' not found."
+            logger.error(error_msg)
+            return error_msg # Return error string for LLM
+
+        logger.info(f"Executing tool '{tool_name}' with args: {tool_args}")
+        try:
+            sig = inspect.signature(tool_function)
+            tool_params = sig.parameters
+
+            # Prepare arguments based on whether the tool needs state/executor
+            pass_args = {}
+            if "state_manager" in tool_params:
+                 pass_args["state_manager"] = self.state_manager
+            if "code_executor" in tool_params:
+                 pass_args["code_executor"] = self.code_executor
+
+            # Filter tool_args to only include parameters expected by the function
+            valid_args = {k: v for k, v in tool_args.items() if k in tool_params}
+            pass_args.update(valid_args)
+
+            # Check for missing required arguments (simple check)
+            required_params = {p.name for p in tool_params.values() if p.default == inspect.Parameter.empty and p.name not in pass_args}
+            # Exclude state_manager/code_executor if they are passed implicitly
+            required_params -= {'state_manager', 'code_executor'}
+
+            if required_params:
+                 missing_str = ", ".join(required_params)
+                 raise TypeError(f"missing required positional argument(s): '{missing_str}'")
+
+
+            # Execute with prepared arguments
+            return tool_function(**pass_args)
+
+        except TypeError as e:
+             # Catch argument mismatches (missing or unexpected)
+             logger.error(f"TypeError executing tool '{tool_name}' with args {tool_args}: {e}", exc_info=True)
+             return f"Error executing tool '{tool_name}': Argument mismatch - {e}"
+        except Exception as e:
+            logger.error(f"Error executing tool '{tool_name}': {e}", exc_info=True)
+            # Return a descriptive error string suitable for the LLM
+            return f"Error executing tool '{tool_name}': {type(e).__name__}: {e}"
+
+    def get_callable_tools_for_eval(self) -> Dict[str, Callable]:
+        """Returns tools intended to be directly callable from within execute_python code."""
+        eval_tools = {}
+        # Exclude meta-tools and potentially sensitive tools like save_file
+        # Let the LLM decide to use the 'save_file' *tool*, don't let code call it directly easily.
+        # Search is often useful from code.
+        excluded_for_eval = ["execute_python", "update_plan", "record_findings", "final_answer", "save_file"]
+        for name, func in self._tools.items():
+            if name not in excluded_for_eval:
+                 # Check if function requires state_manager or code_executor - if so, cannot be directly called
+                 sig = inspect.signature(func)
+                 if "state_manager" not in sig.parameters and "code_executor" not in sig.parameters:
+                     eval_tools[name] = func
+                 else:
+                      logger.debug(f"Skipping tool '{name}' for eval context as it requires agent state.")
+
+        logger.debug(f"Providing tools for Python eval context: {list(eval_tools.keys())}")
+        return eval_tools
+
+================================================================================
+File: ./agent/state_manager.py
+================================================================================
+
+import logging
+import json
+from typing import List, Dict, Any, Optional
+
+# Assume PLAN_TEMPLATE and FINDINGS_TEMPLATE are loaded correctly
+# If they come from files, use file reading here. For simplicity:
+try:
+    with open('templates/plan_template.md', 'r') as f: PLAN_TEMPLATE = f.read()
+except Exception: PLAN_TEMPLATE = "# Agent Plan\n\n- [ ] Initial task analysis."
+try:
+    with open('templates/findings_template.md', 'r') as f: FINDINGS_TEMPLATE = f.read()
+except Exception: FINDINGS_TEMPLATE = "# Agent Findings\n\n## Summary\n\n## Details"
+
+
+logger = logging.getLogger(__name__)
+
+class StateManager:
+    """Manages the agent's state: history, plan, findings, execution scope, status."""
+
+    def __init__(self, initial_task: str, system_prompt: str):
+        self.initial_task = initial_task
+        # Ensure initial task is wrapped correctly
+        self.message_history: List[Dict[str, Any]] = [
+            {"role": "user", "content": [{"type": "text", "text": initial_task}]}
+        ]
+        self.system_prompt = system_prompt
+        self.plan: str = PLAN_TEMPLATE
+        self.findings: str = FINDINGS_TEMPLATE
+        self.execution_globals: Dict[str, Any] = {}
+        self._is_done: bool = False
+        self.final_answer: Optional[str] = None
+        logger.debug("StateManager initialized.")
+
+    def add_message(self, role: str, content: Any):
+        """Adds a correctly formatted message to the history."""
+        if not content:
+            logger.warning(f"Attempted to add empty message for role {role}. Skipping.")
+            return
+
+        # Ensure content is always a list of blocks as per Anthropic spec
+        if not isinstance(content, list):
+            # Simple case: convert string to text block
+            if isinstance(content, str):
+                content = [{"type": "text", "text": content}]
+            else:
+                # Try converting other types? For now, log error and wrap as text.
+                logger.warning(f"Non-list/string content added for role {role}. Wrapping as text: {str(content)[:100]}")
+                content = [{"type": "text", "text": str(content)}]
+
+        # Validate block structure (basic)
+        valid_content = []
+        for block in content:
+             if isinstance(block, dict) and "type" in block:
+                 # Further validation could check required fields per type
+                 valid_content.append(block)
+             elif hasattr(block, 'model_dump'): # Handle Pydantic models passed in
+                  try:
+                      valid_content.append(block.model_dump())
+                  except Exception as e:
+                      logger.warning(f"Could not serialize block object for role {role}: {e}. Block: {block}")
+             else:
+                 logger.warning(f"Invalid block structure ignored in role {role}: {block}")
+
+        if not valid_content:
+             logger.warning(f"No valid content blocks found for role {role} after processing. Skipping add.")
+             return
+
+        # Prevent consecutive messages from the same role (Anthropic requirement)
+        if self.message_history and self.message_history[-1]["role"] == role:
+            if role == "assistant":
+                 # This is a critical error for the API
+                 logger.error("CRITICAL: Attempting to add assistant message immediately after another assistant message! This will cause an API error. History: %s", [m['role'] for m in self.message_history])
+                 # Best action? Skip adding this message? Modify history?
+                 # Skipping is safest to avoid API error, but might lose thought context.
+                 logger.error("Skipping the second consecutive assistant message to prevent API failure.")
+                 return # Skip adding this message
+            elif role == "user":
+                 # This often happens with tool results. Anthropic API allows this.
+                 logger.debug(f"Consecutive user messages detected. Appending.")
+                 pass # Allowed by API
+
+        logger.debug(f"Adding message: Role={role}, Blocks={len(valid_content)}")
+        self.message_history.append({"role": role, "content": valid_content})
+
+
+    def add_assistant_message(self, content_blocks: List[Any]):
+        """Adds the assistant's response (thoughts and tool calls) to history."""
+        if not content_blocks:
+             logger.debug("add_assistant_message called with empty content blocks.")
+             return
+        logger.debug(f"Adding assistant response with {len(content_blocks)} block(s).")
+        # Convert objects (like Anthropic's SDK response blocks) to dicts if needed
+        processed_blocks = []
+        for block in content_blocks:
+            if hasattr(block, 'model_dump'): # Check for Pydantic models or similar
+                processed_blocks.append(block.model_dump())
+            elif isinstance(block, dict):
+                processed_blocks.append(block)
+            else:
+                 logger.warning(f"Cannot process block type {type(block)} in assistant message. Skipping.")
+        if processed_blocks:
+             self.add_message(role="assistant", content=processed_blocks)
+        else:
+             logger.warning("No valid blocks processed from assistant message.")
+
+
+    def add_tool_results(self, results: List[Dict[str, Any]]):
+        """Adds multiple tool result messages as a single user message to the history."""
+        if not results:
+            logger.debug("add_tool_results called with empty list.")
+            return
+
+        tool_result_blocks = []
+        for result_info in results:
+            tool_use_id = result_info.get("tool_use_id")
+            content = result_info.get("content") # This should be the concise string for the LLM
+            is_error = result_info.get("is_error", False)
+
+            if not tool_use_id:
+                logger.warning("Tool result missing 'tool_use_id'. Skipping.")
+                continue
+
+            # Ensure content for LLM is stringified
+            content_str = str(content) if content is not None else ""
+            # Truncate long content for LLM history? Maybe not needed if agent prepares it well.
+            # MAX_LLM_CONTENT_LEN = 500
+            # if len(content_str) > MAX_LLM_CONTENT_LEN:
+            #      content_str = content_str[:MAX_LLM_CONTENT_LEN] + "... (truncated)"
+
+            result_block = {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": content_str,
+                "is_error": is_error,
+            }
+            tool_result_blocks.append(result_block)
+
+        if tool_result_blocks:
+            logger.debug(f"Adding {len(tool_result_blocks)} tool results as user message.")
+            self.add_message(role="user", content=tool_result_blocks)
+
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        """Returns the current message history."""
+        # Maybe add validation/cleanup here before returning?
+        return self.message_history
+
+    def get_system_prompt(self) -> str:
+        """Returns the system prompt."""
+        return self.system_prompt
+
+    def update_plan(self, plan_markdown: str):
+        """Updates the plan state."""
+        self.plan = plan_markdown
+        logger.info("Plan updated.")
+        # logger.debug(f"New plan:\n{plan_markdown}")
+
+    def get_plan(self) -> str:
+        """Returns the current plan."""
+        return self.plan
+
+    def update_findings(self, findings_markdown: str):
+        """Updates the findings state."""
+        # Replace strategy seems more inline with spec's single `findings` output type
+        self.findings = findings_markdown
+        logger.info("Findings updated.")
+        # logger.debug(f"New findings:\n{findings_markdown}")
+
+    def get_findings(self) -> str:
+        """Returns the current findings."""
+        return self.findings
+
+    def update_globals(self, new_globals: Dict[str, Any]):
+        """Updates the execution scope with new variables from Python execution."""
+        # Basic filtering: avoid adding the entire __builtins__ module if it's just the default
+        if '__builtins__' in new_globals:
+             # This check might be too simple if builtins were modified
+             # A more robust check might compare against initial builtins
+             if isinstance(new_globals['__builtins__'], dict): # It's usually a module, but exec might change it
+                  pass # Keep if it's somehow become a dict
+             elif hasattr(new_globals['__builtins__'], '__name__') and new_globals['__builtins__'].__name__ == 'builtins':
+                  # Check if it seems like the standard module and if it wasn't there before or changed
+                  if '__builtins__' not in self.execution_globals or self.execution_globals['__builtins__'] != new_globals['__builtins__']:
+                       self.execution_globals['__builtins__'] = new_globals['__builtins__'] # Update only if changed/new
+             # Remove from new_globals so it's not processed below if it was the default module
+             if '__builtins__' in new_globals and not isinstance(new_globals['__builtins__'], dict) and new_globals['__builtins__'].__name__ == 'builtins':
+                   del new_globals['__builtins__']
+
+
+        self.execution_globals.update(new_globals)
+        if new_globals: # Log only if there were actual updates passed
+            logger.debug(f"Execution globals updated with keys: {list(new_globals.keys())}")
+
+    def get_globals(self) -> Dict[str, Any]:
+        """Returns the current execution scope."""
+        return self.execution_globals.copy() # Return a copy
+
+    def set_initial_globals(self, initial_globals: Dict[str, Any]):
+        """Sets the initial global scope."""
+        self.execution_globals = initial_globals.copy() # Work with a copy
+        logger.info("Initial execution globals set.")
+
+    def set_done(self, final_answer: Any):
+        """Marks the agent's task as complete."""
+        if not self._is_done:
+             self._is_done = True
+             # Ensure final answer is a string for consistency
+             self.final_answer = str(final_answer) if final_answer is not None else "Task completed."
+             logger.info(f"Agent task marked as done. Final Answer: {self.final_answer}")
+
+    def check_done(self) -> bool:
+        """Checks if the agent's task is complete."""
+        return self._is_done
+
+    def get_final_answer(self) -> Optional[str]:
+        """Returns the final answer string."""
+        return self.final_answer
+
+
+================================================================================
+File: ./agent/code_executor.py
+================================================================================
+
+import io
+import contextlib
+import logging
+from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
+
+class CodeExecutor:
+    """Executes Python code snippets within a controlled, persistent context."""
+
+    def __init__(self, initial_globals: Optional[Dict[str, Any]] = None):
+        """
+        Initializes the executor with a predefined global scope.
+        Args:
+            initial_globals: Dictionary containing allowed imports and tool functions.
+                             If None, starts with an empty scope.
+        """
+        # Important: Operate on a copy to avoid modifying the initial dict directly
+        # if the executor instance is reused in unintended ways.
+        self.globals_locals: Dict[str, Any] = (initial_globals or {}).copy()
+        # Ensure basic builtins are available if not provided
+        if '__builtins__' not in self.globals_locals:
+             import builtins
+             self.globals_locals['__builtins__'] = builtins.__dict__ # Provide standard builtins
+        logger.info(f"CodeExecutor initialized with globals: {list(self.globals_locals.keys())}")
+
+    def execute(self, code_string: str) -> Dict[str, Any]:
+        """
+        Executes the given Python code string using exec().
+        Captures stdout and exceptions. Updates the internal globals/locals scope.
+
+        Args:
+            code_string: The Python code to execute.
+
+        Returns:
+            A dictionary containing:
+                'stdout': Captured standard output (string).
+                'error': Error message if execution failed (string), else None.
+                'updated_globals': A dict of variables newly defined or modified by the code.
+        """
+        logger.info(f"Executing code:\n---\n{code_string}\n---")
+        stdout_capture = io.StringIO()
+        error_message: Optional[str] = None
+        # Track globals before execution to identify changes
+        # Shallow copy is usually sufficient unless code modifies objects deeply in place.
+        globals_before = self.globals_locals.copy()
+
+        try:
+            # Redirect stdout to capture print statements
+            with contextlib.redirect_stdout(stdout_capture):
+                # Using exec allows for multi-line statements, imports, definitions etc.
+                # Provide the persistent globals/locals dictionary for execution context.
+                compiled_code = compile(code_string, '<string>', 'exec')
+                exec(compiled_code, self.globals_locals) # Executes in place, modifying self.globals_locals
+
+        except Exception as e:
+            error_message = f"{type(e).__name__}: {e}"
+            logger.error(f"Code execution failed: {error_message}", exc_info=True) # Log with traceback
+            # Decide on state restoration: Keep changes up to the point of error (default exec behavior)
+            # Or potentially restore globals_before? For simplicity, keep partial changes.
+
+        stdout_result: str = stdout_capture.getvalue()
+        if stdout_result: # Log only if there was output
+             logger.info(f"Execution stdout:\n---\n{stdout_result}\n---")
+
+        # Identify newly added/modified variables
+        # Compare current globals with the snapshot taken before execution
+        updated_globals = {}
+        current_keys = set(self.globals_locals.keys())
+        original_keys = set(globals_before.keys())
+
+        # Check for added keys
+        added_keys = current_keys - original_keys
+        for key in added_keys:
+            updated_globals[key] = self.globals_locals[key]
+
+        # Check for modified keys (basic identity check, might miss mutable object changes)
+        potentially_modified_keys = current_keys.intersection(original_keys)
+        for key in potentially_modified_keys:
+             # Avoid comparing large objects if possible, basic check first
+             if key == '__builtins__': continue # Often large and complex, skip simple check
+             try:
+                  if self.globals_locals[key] is not globals_before[key]:
+                       # More robust check needed for mutable objects (e.g., list, dict)
+                       # This basic check catches reassignment and changes to immutables.
+                       # For simplicity, we'll rely on this; deep comparison is complex.
+                       updated_globals[key] = self.globals_locals[key]
+             except Exception: # Handle potential comparison errors
+                  # If comparison fails, assume it changed
+                   updated_globals[key] = self.globals_locals[key]
+
+
+        # Exclude builtins from the reported updates if it wasn't genuinely modified/added
+        if '__builtins__' in updated_globals and '__builtins__' in globals_before:
+             # If it existed before and now, only report if it seems different
+             if updated_globals['__builtins__'] is globals_before['__builtins__']:
+                  del updated_globals['__builtins__']
+        elif '__builtins__' in updated_globals and '__builtins__' not in globals_before:
+             pass # Keep it if it was newly added (unlikely but possible)
+
+
+        if updated_globals:
+             logger.debug(f"Globals updated by execution: {list(updated_globals.keys())}")
+        else:
+             logger.debug("No globals were detected as updated by execution.")
+
+        return {
+            "stdout": stdout_result,
+            "error": error_message,
+            "updated_globals": updated_globals # Return changes for StateManager
+        }
+
+    def get_current_globals(self) -> Dict[str, Any]:
+        """Returns a copy of the current state of the execution globals."""
+        return self.globals_locals.copy()
+
+================================================================================
+File: ./agent/llm.py
+================================================================================
+
+import logging
+import json
+from typing import List, Dict, Any, Optional
+from anthropic import AnthropicBedrock, Anthropic, APIStatusError, APIResponseValidationError, RateLimitError, APIConnectionError # Use appropriate client and exceptions
+# Or: from anthropic import AnthropicBedrock
+import config # Import your config file
+
+logger = logging.getLogger(__name__)
+
+class LLMInteraction:
+    """Handles communication with the Anthropic API (Bedrock or direct)."""
+
+    def __init__(self):
+        self.model_id = config.MODEL_ID
+        self.client = None
+        try:
+            if config.USE_BEDROCK:
+                logger.info(f"Initializing Anthropic Bedrock client for region {config.BEDROCK_AWS_REGION} and model {self.model_id}")
+                # Ensure Boto3 is configured correctly (environment variables, IAM role, etc.)
+                # Boto3 session is implicitly created by AnthropicBedrock if needed
+                self.client = AnthropicBedrock(
+                    aws_access_key=config.BEDROCK_AWS_ACCESS_KEY_ID, # Can be None if using env vars/roles
+                    aws_secret_key=config.BEDROCK_AWS_SECRET_ACCESS_KEY, # Can be None
+                    aws_region=config.BEDROCK_AWS_REGION,
+                    # aws_session_token=Optional_Token # If using temporary credentials
+                )
+                logger.info("Anthropic Bedrock client initialized.")
+            elif config.ANTHROPIC_API_KEY:
+                logger.info(f"Initializing direct Anthropic API client for model {self.model_id}.")
+                self.client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
+                logger.info("Direct Anthropic client initialized.")
+            else:
+                # Fatal error if no client can be configured
+                logger.error("No API credentials configured for Anthropic or Bedrock. LLM calls will fail.")
+                raise ValueError("No API credentials configured for Anthropic or Bedrock.")
+
+        except Exception as e:
+             logger.error(f"Failed to initialize Anthropic client: {e}", exc_info=True)
+             # Depending on recovery strategy, might raise or just log and let calls fail later.
+             raise ValueError(f"Failed to initialize Anthropic client: {e}") from e
+
+
+    def generate_response(self, messages: List[Dict[str, Any]], system_prompt: str, tools: List[Dict[str, Any]]) -> Optional[Any]:
+        """
+        Sends messages to the configured Anthropic API (Bedrock or direct) and gets the response.
+
+        Args:
+            messages: The conversation history.
+            system_prompt: The system prompt string.
+            tools: The list of tool definitions for the API call.
+
+        Returns:
+            The Anthropic API response message object (which includes content blocks, stop_reason, etc.),
+            or None if a critical error occurs during the API call.
+        """
+        if not self.client:
+             logger.error("Anthropic client not initialized. Cannot generate response.")
+             return None
+
+        logger.info(f"Sending request to model {self.model_id} with {len(messages)} history messages and {len(tools)} tools.")
+        logger.debug(f"System Prompt: {system_prompt[:200]}...") # Log beginning of prompt
+
+        # Basic validation before sending
+        if not messages:
+             logger.error("Message history is empty. Cannot make API call.")
+             return None
+        if messages[-1]['role'] == 'assistant':
+            logger.error("CRITICAL: Attempting to call LLM when the last message is from 'assistant'. This will fail.")
+            # Attempt auto-fix or return None? Returning None is safer.
+            # For debugging: Log the sequence
+            roles_sequence = [msg.get('role', 'unknown') for msg in messages]
+            logger.error(f"Message roles sequence: {' -> '.join(roles_sequence)}")
+            return None # Prevent the API error
+
+        # Log message structure for debugging (optional, can be verbose)
+        # try: logger.debug(f"Messages dump:\n{json.dumps(messages, indent=2)}")
+        # except Exception: logger.debug("Could not dump messages to JSON for logging.")
+        # try: logger.debug(f"Tools dump:\n{json.dumps(tools, indent=2)}")
+        # except Exception: logger.debug("Could not dump tools to JSON for logging.")
+
+
+        try:
+            logger.debug("Sending API request...")
+            response = self.client.messages.create(
+                model=self.model_id,
+                system=system_prompt,
+                messages=messages,
+                tools=tools,
+                tool_choice={"type": "auto"}, # Let model decide whether to use tool
+                max_tokens=4096, # Max output tokens
+                temperature=0.1, # Lower temperature for more deterministic tool use/planning
+                # top_p=1.0, # Default
+                # top_k=None, # Default
+                # stop_sequences=None # Default
+            )
+            logger.info(f"Received response. Stop reason: {response.stop_reason}, Role: {response.role}")
+            logger.debug(f"Response model: {response.model}, ID: {response.id}, Type: {response.type}")
+            logger.debug(f"Usage: Input tokens={response.usage.input_tokens}, Output tokens={response.usage.output_tokens}")
+
+            # Log response content structure (optional)
+            if response.content:
+                # logger.debug("Response content blocks:")
+                # for i, block in enumerate(response.content):
+                #     if block.type == "text":
+                #         logger.debug(f" Block {i+1}: Type=text, Text='{block.text[:100]}...'")
+                #     elif block.type == "tool_use":
+                #         logger.debug(f" Block {i+1}: Type=tool_use, Name='{block.name}', Input='{str(block.input)[:100]}...'")
+                 # Validate tool use blocks if needed
+                 for block in response.content:
+                     if block.type == "tool_use":
+                         if not hasattr(block, 'name') or not block.name:
+                             logger.error("API response included a tool_use block without a 'name'.")
+                             # Treat as error? Or just log?
+                         if not hasattr(block, 'input') or not isinstance(block.input, dict):
+                             logger.error(f"API response included a tool_use block ('{block.name}') with invalid 'input'.")
+
+            return response
+
+        # --- Specific Anthropic Error Handling ---
+        except RateLimitError as e:
+            logger.warning(f"Anthropic API rate limit hit: {e}. Consider backoff/retry.")
+            # In a production system, implement exponential backoff here.
+            return None # Indicate failure for this attempt
+        except APIConnectionError as e:
+             logger.error(f"Anthropic API connection error: {e}. Check network/firewall.")
+             return None
+        except APIStatusError as e:
+             # Handles non-200 status codes (e.g., 400 Bad Request, 500 Internal Server Error)
+             logger.error(f"Anthropic API returned an error status: {e.status_code} - {e.message}", exc_info=True)
+             logger.error(f"Error details: {e.response.text}") # Log raw response body
+             return None
+        except APIResponseValidationError as e:
+             # Handles cases where the response from the API doesn't match the expected schema
+             logger.error(f"Failed to validate the Anthropic API response: {e}", exc_info=True)
+             logger.error(f"Invalid response body: {e.response.text}")
+             return None
+        # --- General Error Handling ---
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during the LLM API call: {e}", exc_info=True)
+            return None
+
+
+================================================================================
+File: ./agent/agent.py
+================================================================================
+
+import logging
+import json
+import asyncio
+import importlib
+import inspect
+import mimetypes # For determining file types
+import os # For path manipulation
+from typing import Dict, Any, List, Literal, Tuple, Optional
+from fastapi import WebSocket
+from starlette.websockets import WebSocketState
+from contextlib import suppress
+
+import config
+from .state_manager import StateManager
+from .llm import LLMInteraction
+from .code_executor import CodeExecutor
+from .tool_manager import ToolManager
+from .prompt import get_system_prompt, get_initial_plan_prompt
+from schemas import AgentResponse, ContentType # Import new response schema
+
+logger = logging.getLogger(__name__)
+
+AgentStage = Literal[
+    "initializing",
+    "generating_plan",
+    "waiting_for_plan_confirmation",
+    "running",
+    "stopping", # Added state for graceful stop
+    "stopped",
+    "done",
+    "error"
+]
+
+class Agent:
+    def __init__(self, task: str, websocket: WebSocket):
+        self.task = task
+        self.websocket = websocket
+        self.stage: AgentStage = "initializing"
+        self.llm = LLMInteraction()
+        # Pass websocket to state manager ONLY IF needed for sending ws messages directly from state? (Avoid if possible)
+        self.state_manager = StateManager(initial_task=task, system_prompt="Initializing...")
+        self.code_executor = CodeExecutor(initial_globals={}) # Start with empty, prepare_globals sets it
+        self.tool_manager = ToolManager(
+            state_manager=self.state_manager,
+            code_executor=self.code_executor,
+            allowed_imports=config.AUTHORIZED_IMPORTS
+        )
+        # Prepare globals AFTER tool manager is initialized (so tools are available)
+        self.initial_globals, self.custom_funcs_info = self._prepare_initial_globals()
+        self.state_manager.set_initial_globals(self.initial_globals)
+        self.code_executor.globals_locals = self.state_manager.get_globals() # Ensure executor has initial state
+
+        tool_definitions = self.tool_manager.get_tool_definitions()
+        main_system_prompt = get_system_prompt(
+            tool_definitions=tool_definitions,
+            authorized_imports=config.AUTHORIZED_IMPORTS,
+            custom_python_functions=self.custom_funcs_info
+        )
+        self.state_manager.system_prompt = main_system_prompt # Set the main prompt
+        self.stage = "initializing" # Set stage *after* full setup
+        logger.info(f"Agent initialized for task: {task[:100]}...")
+
+
+    async def _send_chunk(self, type: Literal["plan", "artifact", "findings"], content_type: ContentType, content_chunk: str, command: Optional[Literal["stop"]] = None):
+        """Sends a single chunk according to the AgentResponse schema."""
+        # Check websocket state first
+        if self.websocket.application_state != WebSocketState.CONNECTED:
+            logger.warning(f"WebSocket no longer connected (state={self.websocket.application_state}). Cannot send chunk (type={type}).")
+            # Set agent state to error if trying to send while disconnected, unless already terminal
+            if self.stage not in ["stopped", "done", "error"]:
+                 logger.warning(f"Setting agent stage to 'error' due to disconnected websocket during send.")
+                 self.stage = "error"
+            return
+
+        try:
+            response = AgentResponse(
+                type=type,
+                content_type=content_type, # Use alias directly here
+                content=content_chunk,
+                command=command
+            )
+            # Use model_dump_json which respects aliases like 'content/type'
+            await self.websocket.send_text(response.model_dump_json(by_alias=True, exclude_none=True))
+            # logger.debug(f"Sent chunk: Type={type}, Content='{content_chunk[:30]}...', Command={command}")
+        except WebSocketDisconnect:
+             logger.warning(f"WebSocket disconnected during send operation for chunk (type={type}).")
+             if self.stage not in ["stopped", "done", "error"]:
+                 self.stage = "error"
+        except Exception as e:
+            logger.error(f"WebSocket send failed unexpectedly for chunk (type={type}): {e}", exc_info=True)
+            # If send fails, assume connection is lost or errored
+            if self.stage not in ["stopped", "done", "error"]:
+                 self.stage = "error"
+
+
+    async def _stream_response(self, type: Literal["plan", "artifact", "findings"], content_type: ContentType, full_content: str):
+        """Streams a potentially large response in chunks."""
+        if not isinstance(full_content, str):
+             logger.warning(f"Attempted to stream non-string content (type: {content_type}). Converting to string: {str(full_content)[:100]}...")
+             try:
+                  full_content = str(full_content)
+             except Exception as e:
+                  logger.error(f"Failed to convert content to string for streaming: {e}. Sending empty.")
+                  full_content = "" # Send empty if conversion fails
+
+
+        # Check agent stage before starting stream
+        if self.stage in ["error", "stopped", "stopping"]:
+             logger.warning(f"Agent is in stage '{self.stage}', skipping streaming response (type={type}).")
+             return
+
+        # Special handling for empty content: send only stop command
+        if not full_content:
+            # logger.debug(f"Streaming empty content for type {type}, sending only stop command.")
+            await self._send_chunk(type=type, content_type=content_type, content_chunk="", command="stop")
+            return
+
+        # logger.debug(f"Streaming response: Type={type}, ContentType={content_type}, Length={len(full_content)}")
+        start = 0
+        stream_task_name = f"stream_{type}_{content_type}" # For logging/debugging potentially
+        while start < len(full_content):
+            # Check stage before sending each chunk
+            # Allow sending final messages in 'done' stage
+            allowed_stages = ["running", "generating_plan", "waiting_for_plan_confirmation", "done"]
+            if self.stage not in allowed_stages:
+                logger.warning(f"Stopping stream '{stream_task_name}' mid-way due to agent stage change: {self.stage}")
+                return # Exit the streaming loop
+
+            end = start + config.STREAM_CHUNK_SIZE
+            chunk = full_content[start:end]
+            await self._send_chunk(type=type, content_type=content_type, content_chunk=chunk)
+            start = end
+            await asyncio.sleep(0.01) # Small delay to prevent overwhelming the event loop/network
+
+        # Send final chunk with stop command after loop finishes naturally
+        await self._send_chunk(type=type, content_type=content_type, content_chunk="", command="stop")
+        # logger.debug(f"Finished streaming response for type {type}")
+
+
+    def _prepare_initial_globals(self) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
+        """Prepares the initial global scope for the CodeExecutor."""
+        initial_globals = {}
+        custom_funcs_for_prompt = []
+
+        # 1. Allowed standard modules
+        for import_name in config.AUTHORIZED_IMPORTS:
+            try:
+                module = importlib.import_module(import_name)
+                initial_globals[import_name] = module
+                logger.info(f"Made module '{import_name}' available to Python execution.")
+            except ImportError:
+                logger.warning(f"Could not import configured module '{import_name}'. It will not be available.")
+            except Exception as e:
+                 logger.error(f"Error importing module '{import_name}': {e}", exc_info=True)
+
+
+        # 2. Callable LLM tools (search, etc.) - Provided to CodeExecutor
+        # Ensure tool_manager is initialized before calling this
+        if hasattr(self, 'tool_manager'):
+            callable_llm_tools = self.tool_manager.get_callable_tools_for_eval()
+            initial_globals.update(callable_llm_tools)
+            logger.info(f"Made LLM tools {list(callable_llm_tools.keys())} available to Python execution.")
+        else:
+            logger.error("ToolManager not initialized before _prepare_initial_globals. Cannot add tools.")
+
+
+        # 3. Custom Python functions from configured module
+        if config.CUSTOM_AGENT_FUNCTIONS_MODULE:
+            try:
+                custom_module = importlib.import_module(config.CUSTOM_AGENT_FUNCTIONS_MODULE)
+                logger.info(f"Loading custom functions from: {config.CUSTOM_AGENT_FUNCTIONS_MODULE}")
+                func_count = 0
+                for name, func in inspect.getmembers(custom_module, inspect.isfunction):
+                    if not name.startswith("_"):
+                        if name in initial_globals:
+                            logger.warning(f"Custom function '{name}' overwrites an existing global/tool name.")
+                        initial_globals[name] = func
+                        docstring = inspect.getdoc(func) or "No description available."
+                        try:
+                            sig = str(inspect.signature(func))
+                        except (ValueError, TypeError): # Catch potential errors getting signature
+                            logger.debug(f"Could not get signature for function '{name}', using fallback '(...)'")
+                            sig = "(...)" # Fallback
+                        full_description = f"{name}{sig}\n{docstring}"
+                        custom_funcs_for_prompt.append({"name": name,"description": full_description})
+                        logger.info(f"Made custom function '{name}' available to Python execution.")
+                        func_count += 1
+                if func_count == 0:
+                     logger.info(f"No public functions found in {config.CUSTOM_AGENT_FUNCTIONS_MODULE}.")
+
+            except ImportError:
+                logger.error(f"Could not import custom functions module '{config.CUSTOM_AGENT_FUNCTIONS_MODULE}'.")
+            except Exception as e:
+                logger.error(f"Error processing custom functions module '{config.CUSTOM_AGENT_FUNCTIONS_MODULE}': {e}", exc_info=True)
+        else:
+            logger.info("No CUSTOM_AGENT_FUNCTIONS_MODULE specified in config.")
+
+        # 4. Inject AGENT_OUTPUT_DIR Path if configured
+        if config.AGENT_OUTPUT_DIR and config.AGENT_OUTPUT_DIR_NAME:
+            initial_globals['AGENT_OUTPUT_DIR'] = config.AGENT_OUTPUT_DIR # Absolute path
+            initial_globals['AGENT_OUTPUT_DIR_NAME'] = config.AGENT_OUTPUT_DIR_NAME # Relative path name
+            logger.info(f"Made AGENT_OUTPUT_DIR='{config.AGENT_OUTPUT_DIR}' and AGENT_OUTPUT_DIR_NAME='{config.AGENT_OUTPUT_DIR_NAME}' available to Python execution.")
+        else:
+            logger.warning("AGENT_OUTPUT_DIR or AGENT_OUTPUT_DIR_NAME not configured. File saving from Python code might fail or require hardcoded paths.")
+            initial_globals['AGENT_OUTPUT_DIR'] = None
+            initial_globals['AGENT_OUTPUT_DIR_NAME'] = None
+
+        # Add __builtins__ if not already present (CodeExecutor does this too, but belt-and-suspenders)
+        if '__builtins__' not in initial_globals:
+             import builtins
+             initial_globals['__builtins__'] = builtins
+
+        return initial_globals, custom_funcs_for_prompt
+
+
+    async def generate_initial_plan(self):
+        if self.stage != "initializing":
+            logger.warning(f"generate_initial_plan called at incorrect stage: {self.stage}. Ignoring.")
+            return
+        self.stage = "generating_plan"
+        logger.info("Generating initial plan...")
+        await self._stream_response("artifact", "text", "Generating initial plan...")
+        # Check stage *after* await
+        if self.stage != "generating_plan":
+            logger.info(f"Plan generation aborted; stage changed to {self.stage}.")
+            return
+
+        planning_tool_def = next((t for t in self.tool_manager.get_tool_definitions() if t['name'] == 'update_plan'), None)
+        if not planning_tool_def:
+            logger.error("Critical error: 'update_plan' tool definition is missing.")
+            err_msg = json.dumps({"error": "Agent setup error: Planning tool missing."})
+            await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+            self.stage = "error"
+            return
+
+        planning_tools = [planning_tool_def]
+        planning_system_prompt = get_initial_plan_prompt(custom_python_functions=self.custom_funcs_info)
+        # Use the original task from the StateManager (already formatted as list of blocks)
+        initial_user_message = self.state_manager.get_history()[0]
+        if not initial_user_message or initial_user_message['role'] != 'user':
+             logger.error("Initial user message not found in history. Cannot generate plan.")
+             err_msg = json.dumps({"error": "Internal state error: Initial task missing."})
+             await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+             self.stage = "error"
+             return
+
+        initial_messages = [initial_user_message]
+
+        # --- LLM Call ---
+        response_message = self.llm.generate_response(
+            messages=initial_messages,
+            system_prompt=planning_system_prompt,
+            tools=planning_tools
+        )
+        # --- LLM Call End ---
+
+        # Check stage again after potentially long LLM call
+        if self.stage != "generating_plan":
+             logger.info(f"Plan generation aborted after LLM call; stage changed to {self.stage}.")
+             return
+
+        if response_message is None or not response_message.content:
+            logger.error("LLM failed to respond during initial plan generation.")
+            err_msg = json.dumps({"error": "LLM failed to generate initial plan."})
+            await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+            self.stage = "error"
+            return
+
+        # Process response to find the plan
+        extracted_plan, llm_thought = None, ""
+        for block in response_message.content:
+            if block.type == "tool_use" and block.name == "update_plan":
+                try:
+                    # Validate input structure before accessing
+                    if isinstance(block.input, dict) and "plan_markdown" in block.input:
+                        plan_text = block.input.get("plan_markdown", "")
+                        if plan_text and "[ ]" in plan_text: # Basic validation
+                            extracted_plan = plan_text
+                            logger.info("Extracted initial plan from LLM response.")
+                            break # Found the plan
+                        else:
+                            logger.warning(f"LLM used 'update_plan' tool but provided invalid/empty plan: '{str(plan_text)[:100]}...'")
+                    else:
+                         logger.warning(f"LLM used 'update_plan' tool with invalid input structure: {block.input}")
+                except Exception as e:
+                    logger.error(f"Error processing 'update_plan' tool use during plan generation: {e}", exc_info=True)
+            elif block.type == "text":
+                llm_thought += block.text + "\n"
+
+        if llm_thought.strip():
+            logger.info(f"LLM Planning Thought: {llm_thought.strip()}")
+            # Send thought as an artifact
+            await self._stream_response("artifact", "text", f"LLM Planning Thought:\n{llm_thought.strip()}")
+            if self.stage != "generating_plan": return # Check stage after await
+
+        # Send plan or error
+        if extracted_plan:
+            # Send the proposed plan to the UI
+            await self._stream_response("plan", "md", extracted_plan)
+            if self.stage == "generating_plan": # Only change stage if not stopped/errored
+                self.stage = "waiting_for_plan_confirmation"
+                await self._stream_response("artifact", "text", "Plan generated. Please review and confirm via UI.")
+            else:
+                 logger.info(f"Plan generated but agent stage changed to {self.stage} before confirmation state.")
+        else:
+            logger.error("LLM did not use 'update_plan' tool correctly or failed to generate a valid plan.")
+            fallback_content = llm_thought.strip() or "No plan structure found in LLM response."
+            error_msg = f"LLM failed to generate a valid plan structure.\nLLM Output hint:\n{fallback_content}"
+            # Send the error artifact
+            await self._stream_response("artifact", "application/vnd.agent.error+json", json.dumps({"error": error_msg}))
+            # Send the fallback content as a plan so user sees something, even if broken
+            await self._stream_response("plan", "md", f"# Plan Generation Failed\n\n{error_msg}")
+            self.stage = "error"
+
+
+    async def confirm_plan_and_start(self, confirmed_plan: str):
+        if self.stage != "waiting_for_plan_confirmation":
+            logger.warning(f"confirm_plan_and_start called at incorrect stage: {self.stage}. Ignoring.")
+            err_msg = json.dumps({"error": f"Cannot confirm plan, agent stage is '{self.stage}'"})
+            await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+            return
+
+        logger.info("Plan confirmed by user. Starting execution loop.")
+        self.state_manager.update_plan(confirmed_plan)
+        # Send the confirmed plan back (might be adjusted by user)
+        await self._stream_response("plan", "md", confirmed_plan)
+        if self.stage != "waiting_for_plan_confirmation":
+             logger.info(f"Plan confirmation aborted; stage changed to {self.stage}.")
+             return # Check if stopped during plan send
+
+        await self._stream_response("artifact", "text", "Plan confirmed. Starting execution...")
+        if self.stage == "waiting_for_plan_confirmation": # Check again before changing stage
+             self.stage = "running"
+             # Use asyncio.create_task to run the main loop without blocking confirm_plan_and_start
+             logger.info("Creating background task for agent run loop.")
+             asyncio.create_task(self.run(), name=f"agent_run_{self.task[:20]}")
+        else:
+            logger.warning(f"Agent stage changed to {self.stage} before execution could start.")
+
+
+    async def stop(self):
+        """Signals the agent to stop processing gracefully."""
+        # Check current stage to avoid multiple stop attempts or stopping a finished agent
+        if self.stage not in ["stopped", "done", "error", "stopping"]:
+            logger.info(f"Agent stop requested. Current stage: {self.stage}. Transitioning to 'stopping'.")
+            self.stage = "stopping" # Signal termination check in loops/awaits
+            # Send a final status message immediately
+            # Use suppress to avoid errors if websocket closes right after stop request
+            with suppress(Exception):
+                 await self._stream_response("artifact", "text", "Execution stop requested by user.")
+            # Final transition to "stopped" will happen at the end of the run loop or immediately if idle
+            if self.stage == "stopping": # Ensure it wasn't changed by the stream response itself
+                 self.stage = "stopped"
+                 logger.info(f"Agent stage forcibly set to {self.stage} after stop request.")
+        else:
+            logger.info(f"Stop request ignored. Agent already in terminal/stopping state ({self.stage}).")
+
+
+    async def run(self):
+        """Runs the agent's main think-act-observe loop according to the new spec."""
+        # Ensure we are supposed to be running
+        if self.stage != "running":
+            logger.error(f"Agent run() called unexpectedly while in stage: {self.stage}. Aborting run.")
+            return
+
+        logger.info("Agent execution loop started.")
+        await self._stream_response("artifact", "text", "Agent execution started...")
+        if self.stage != "running": return # Check if stopped immediately
+
+        max_iterations = 15 # Safety limit
+        iterations = 0
+
+        try: # Wrap main loop in try block for unexpected errors
+            while self.stage == "running" and not self.state_manager.check_done() and iterations < max_iterations:
+                iterations += 1
+                logger.info(f"--- Agent Iteration {iterations}/{max_iterations} ---")
+                await self._stream_response("artifact", "text", f"Running iteration {iterations}...")
+                if self.stage != "running": break # Check after await
+
+                # 1. Get current state for LLM
+                messages = self.state_manager.get_history()
+                system_prompt = self.state_manager.get_system_prompt()
+                tool_definitions = self.tool_manager.get_tool_definitions()
+
+                # Pre-flight check for history validity (last message should be user/tool_result)
+                if not messages or messages[-1]['role'] == 'assistant':
+                    logger.error(f"CRITICAL STATE ERROR: History ends with 'assistant' before LLM call in iteration {iterations}. History roles: {[m['role'] for m in messages]}")
+                    await self._stream_response("artifact", "application/vnd.agent.error+json", json.dumps({"error": "Internal agent state error: Invalid message sequence."}))
+                    self.stage = "error"
+                    break # Exit loop
+
+                # 2. Call LLM for next action/thought
+                await self._stream_response("artifact", "text", "LLM is thinking...")
+                if self.stage != "running": break
+                response_message = self.llm.generate_response(messages, system_prompt, tool_definitions)
+
+                # Check stage immediately after LLM call returns
+                if self.stage != "running":
+                     logger.info(f"Stopping iteration {iterations} after LLM call; stage changed to {self.stage}.")
+                     break
+
+                if response_message is None:
+                    logger.error("LLM interaction failed (returned None). Terminating run.")
+                    err_msg = json.dumps({"error": "LLM interaction failed. Check LLM logs/status."})
+                    await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+                    self.stage = "error"
+                    break
+
+                # 3. Add LLM response (thoughts and tool calls) to history
+                if response_message.content:
+                    self.state_manager.add_assistant_message(response_message.content)
+                else:
+                    logger.warning("LLM response was empty. Continuing loop.")
+                    await self._stream_response("artifact", "text", "LLM provided empty response this turn.")
+                    await asyncio.sleep(1) # Pause briefly before next iteration
+                    continue
+
+                # 4. Process LLM response blocks & Execute Tools
+                executed_tool_this_turn = False
+                tool_results_to_add = [] # Collect tool results before adding to history
+
+                if response_message.content:
+                    logger.debug(f"Processing {len(response_message.content)} blocks from LLM response.")
+                    for block_idx, block in enumerate(response_message.content):
+                        # Check stage at the start of each block processing
+                        if self.stage != "running":
+                            logger.warning(f"Stopping block processing mid-response (block {block_idx+1}) due to stage change: {self.stage}")
+                            break
+
+                        block_type = block.type
+                        logger.debug(f"Processing block {block_idx+1}: Type={block_type}")
+
+                        if block_type == "text":
+                            thought_text = block.text
+                            logger.info(f"LLM Thought: {thought_text}")
+                            await self._stream_response("artifact", "text", f"LLM Thought:\n{thought_text}")
+                            if self.stage != "running": break # Check after await
+
+                        elif block_type == "tool_use":
+                            # Validate block structure
+                            if not all(hasattr(block, attr) for attr in ['name', 'input', 'id']):
+                                 logger.error(f"Invalid tool_use block structure received: {block}")
+                                 await self._stream_response("artifact", "application/vnd.agent.error+json", json.dumps({"error": "Received invalid tool_use block from LLM."}))
+                                 # Decide whether to continue or set stage to error
+                                 continue # Skip this block
+
+                            tool_name, tool_input, tool_use_id = block.name, block.input, block.id
+                            executed_tool_this_turn = True
+                            logger.info(f"LLM requests TOOL: {tool_name}, ID: {tool_use_id}")
+                            tool_call_info = f"Executing Tool: {tool_name}\nArgs: {json.dumps(tool_input, indent=2)}"
+                            await self._stream_response("artifact", "text", tool_call_info)
+                            if self.stage != "running": break # Check after await
+
+                            # Special handling for showing code before execution
+                            if tool_name == "execute_python":
+                                code_to_run = tool_input.get("code", "")
+                                code_artifact_content = f"Executing Python Code:\n```python\n{code_to_run}\n```"
+                                # Send code as 'text' artifact, UI can choose to render as markdown/code block
+                                await self._stream_response("artifact", "text", code_artifact_content)
+                                if self.stage != "running": break # Check after await
+
+                            # --- Execute the tool ---
+                            logger.debug(f"Executing tool '{tool_name}'...")
+                            result = self.tool_manager.execute_tool(tool_name, tool_input)
+                            logger.debug(f"Tool '{tool_name}' execution finished.")
+                            # --- Tool execution finished ---
+
+                            # Check if tool call itself set state to done (e.g., final_answer tool)
+                            if self.state_manager.check_done():
+                                logger.info(f"Tool '{tool_name}' marked agent as done.")
+                                self.stage = "done"
+                                # Don't break block processing yet, need to send observation
+
+                            # Check stage again after potentially long tool execution
+                            if self.stage == "stopping":
+                                logger.info(f"Stopping iteration {iterations} during tool result processing due to stop signal.")
+                                break # Exit block processing loop
+
+                            is_error = False
+                            content_for_llm = None # Concise result string for history
+                            artifact_content = None # Richer content for UI artifact
+                            artifact_content_type: ContentType = "text" # Default
+
+                            # --- Process tool result ---
+                            if isinstance(result, dict):
+                                # Handle save_file tool result specifically
+                                if "status" in result and tool_name == "save_file":
+                                    artifact_content_type = "application/json" # Send structured info to UI
+                                    artifact_content = json.dumps(result) # Send full dict as artifact
+                                    if result["status"] == "success":
+                                        content_for_llm = f"File saved successfully: {result.get('message', 'OK')}"
+                                    else:
+                                        is_error = True
+                                        content_for_llm = f"Error saving file: {result.get('message', 'Failed')}"
+                                # Handle execute_python result specifically
+                                elif "stdout" in result and "error" in result and tool_name == "execute_python":
+                                    stdout = result.get('stdout', "")
+                                    error = result.get('error', None)
+                                    artifact_content = f"Stdout:\n{stdout}" # Default artifact
+                                    if error:
+                                        is_error = True
+                                        content_for_llm = f"Python Error: {error}\nOutput:\n{stdout}"
+                                        artifact_content += f"\n\nError:\n{error}"
+                                        artifact_content_type = "text" # Send combined output/error as text artifact
+                                    else:
+                                        content_for_llm = f"Python Output:\n{stdout}" # Send full stdout to LLM? Or just summary?
+                                        artifact_content_type = "text" # Send stdout as text artifact
+
+                                        # Check for file signal in stdout and send separate artifact if found
+                                        output_lines = stdout.splitlines()
+                                        for line in output_lines:
+                                            if line.startswith("PRINTED_OUTPUT_FILE:") and config.AGENT_OUTPUT_DIR_NAME:
+                                                rel_path_part = line[len("PRINTED_OUTPUT_FILE:"):].strip()
+                                                # Basic validation: ensure it starts with expected dir name
+                                                if rel_path_part.startswith(config.AGENT_OUTPUT_DIR_NAME + '/'):
+                                                    abs_path = os.path.join(config.AGENT_OUTPUT_DIR or '', os.path.basename(rel_path_part)) # Get abs path for mime check
+                                                    mime_type, _ = mimetypes.guess_type(abs_path)
+                                                    file_info = {
+                                                        "event": "file_generated", # Custom event type for UI
+                                                        "tool": "execute_python",
+                                                        "relative_path": rel_path_part,
+                                                        # "absolute_path": abs_path, # Don't send absolute path to UI
+                                                        "mime_type": mime_type or "application/octet-stream"
+                                                    }
+                                                    logger.info(f"Detected saved file signal: {rel_path_part}")
+                                                    await self._stream_response("artifact", "application/json", json.dumps(file_info))
+                                                    if self.stage != "running" and self.stage != "done": break # Check stage after sending file info
+                                                else:
+                                                    logger.warning(f"Ignoring PRINTED_OUTPUT_FILE signal with unexpected path structure: {line}")
+                                            if self.stage != "running" and self.stage != "done": break # Exit inner loop if stage changed
+                                    # Check stage again after processing stdout lines
+                                    if self.stage != "running" and self.stage != "done": break
+                                else: # Generic dictionary result from other tools
+                                    try:
+                                        artifact_content = json.dumps(result, indent=2)
+                                        artifact_content_type = "application/json"
+                                        content_for_llm = artifact_content # Send full JSON to LLM? Maybe summarize?
+                                    except Exception as json_e:
+                                         logger.warning(f"Could not serialize dictionary result to JSON: {json_e}. Sending as string.")
+                                         artifact_content = str(result)
+                                         artifact_content_type = "text"
+                                         content_for_llm = artifact_content
+
+                            elif isinstance(result, str): # Simple string result
+                                result_str = result
+                                # Check if the string indicates an error (basic check)
+                                if result_str.lower().startswith("error:"):
+                                    is_error = True
+                                content_for_llm = result_str
+                                artifact_content = result_str
+                                artifact_content_type = "text"
+                            else: # Handle other types (e.g., list, int) - convert to string
+                                 logger.debug(f"Received non-dict/str result from tool {tool_name}: {type(result)}. Converting to string.")
+                                 result_str = str(result)
+                                 content_for_llm = result_str
+                                 artifact_content = result_str
+                                 artifact_content_type = "text"
+
+                            # --- Result processing finished ---
+
+                            # Add result to list for history update later
+                            tool_results_to_add.append({
+                                "tool_use_id": tool_use_id,
+                                "content": content_for_llm, # Use the concise version for LLM history
+                                "is_error": is_error
+                            })
+
+                            # Send the observation artifact to the UI
+                            if artifact_content is not None:
+                                await self._stream_response("artifact", artifact_content_type, artifact_content)
+                                if self.stage != "running" and self.stage != "done": break # Check stage after sending artifact
+
+                            # Send plan/findings updates immediately if applicable
+                            # Allow sending even if agent is 'done' by final_answer tool this turn
+                            if self.stage == "running" or self.stage == "done":
+                                if tool_name == "update_plan":
+                                    await self._stream_response("plan", "md", self.state_manager.get_plan())
+                                    if self.stage != "running" and self.stage != "done": break
+                                elif tool_name == "record_findings":
+                                    await self._stream_response("findings", "md", self.state_manager.get_findings())
+                                    if self.stage != "running" and self.stage != "done": break
+
+                            # If agent became done, exit block processing loop
+                            if self.stage == "done":
+                                 logger.info("Agent reached 'done' state after processing tool result.")
+                                 break
+
+                        else: # End of tool_use block processing
+                            logger.warning(f"Received unhandled block type from LLM: {block_type}")
+                            # Maybe send as text artifact?
+                            await self._stream_response("artifact", "text", f"Received unhandled content block type from LLM: {block_type}")
+
+                    # --- End of processing response blocks ---
+                    if self.stage != "running" and self.stage != "done": break # Check stage again after block loop
+
+                # --- Finished processing LLM response ---
+
+                # Add all collected tool results to history *after* processing all blocks
+                if tool_results_to_add:
+                    logger.debug(f"Adding {len(tool_results_to_add)} tool results to history.")
+                    self.state_manager.add_tool_results(tool_results_to_add)
+                    # Check history validity after adding results
+                    if self.state_manager.message_history[-1]['role'] != 'user':
+                         logger.error("CRITICAL STATE ERROR: History does not end with 'user' after adding tool results!")
+
+
+                # If LLM didn't call a tool and didn't stop for tool use, maybe log or wait?
+                if not executed_tool_this_turn and response_message.stop_reason != 'tool_use':
+                    logger.warning(f"LLM finished turn {iterations} without tool use (Stop Reason: {response_message.stop_reason}). Check logic or prompt if unexpected.")
+                    await self._stream_response("artifact", "text", f"LLM completed turn without action (Reason: {response_message.stop_reason}).")
+                    if self.stage != "running": break
+
+                # Short pause between iterations?
+                if self.stage == "running":
+                    await asyncio.sleep(0.2)
+
+            # --- End of main while loop ---
+
+        except asyncio.CancelledError:
+             logger.info(f"Agent run loop task for '{self.task[:30]}...' was cancelled.")
+             self.stage = "stopped" # Treat cancellation as a stop
+             await self._stream_response("artifact", "text", "Execution cancelled.")
+
+        except Exception as e:
+             logger.error(f"Unexpected error in agent run loop (iteration {iterations}): {e}", exc_info=True)
+             self.stage = "error"
+             # Try to send error message to client
+             with suppress(Exception):
+                 err_msg = json.dumps({"error": "Unexpected error in agent execution loop.", "details": str(e)})
+                 await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+
+        finally:
+            # --- Loop End ---
+            logger.info(f"Agent run loop finished. Final stage: {self.stage}")
+
+            # Final status updates based on why the loop ended
+            if self.stage == "done":
+                final_answer = self.state_manager.get_final_answer()
+                logger.info(f"Agent task completed successfully. Final Answer: {final_answer}")
+                # Send final answer as last artifact if not empty
+                if final_answer and final_answer != "Task completed.":
+                     await self._stream_response("artifact", "text", f"Final Answer:\n{final_answer}")
+                await self._stream_response("artifact", "text", "Task completed.")
+            elif self.stage == "error":
+                logger.warning("Agent run finished due to an error.")
+                # Error artifact should have been sent during the loop or in exception handler
+                await self._stream_response("artifact", "text", "Task failed due to an error.")
+            elif self.stage == "stopped" or self.stage == "stopping": # Include stopping just in case
+                logger.info("Agent run stopped by request or cancellation.")
+                # Stop message potentially sent in stop() or cancellation handler
+                await self._stream_response("artifact", "text", "Task execution stopped.")
+                self.stage = "stopped" # Ensure final state is stopped
+            elif iterations >= max_iterations:
+                logger.warning(f"Agent stopped after reaching max iterations ({max_iterations}).")
+                err_msg = json.dumps({"error": f"Task stopped: Maximum iterations ({max_iterations}) reached."})
+                await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+                self.stage = "error" # Mark as error if maxed out
+            elif self.stage == "running": # Should not happen if loop/checks are correct
+                logger.error("Agent loop exited unexpectedly while still in 'running' stage!")
+                self.stage = "error"
+                err_msg = json.dumps({"error": "Agent stopped unexpectedly due to internal error."})
+                await self._stream_response("artifact", "application/vnd.agent.error+json", err_msg)
+
+            logger.info(f"Agent ({self.task[:30]}...) final state: {self.stage}")
+            # Final cleanup could happen here or in main.py's finally block
+
+
+================================================================================
+File: ./agent/prompt.py
+================================================================================
+
+from typing import List, Dict, Any
+import json # For formatting tool schema in prompt
+import config # Needed for AGENT_OUTPUT_DIR_NAME
+
+# Load templates potentially from files if they get large
+try:
+    with open('templates/plan_template.md', 'r', encoding='utf-8') as f: PLAN_TEMPLATE = f.read()
+except Exception: PLAN_TEMPLATE = "# Agent Plan\n\n- [ ] Initial task analysis."
+try:
+    with open('templates/findings_template.md', 'r', encoding='utf-8') as f: FINDINGS_TEMPLATE = f.read()
+except Exception: FINDINGS_TEMPLATE = "# Agent Findings\n\n## Summary\n\n## Details"
+
+
+def get_system_prompt(
+    tool_definitions: List[Dict[str, Any]],
+    authorized_imports: List[str],
+    custom_python_functions: List[Dict[str, str]]
+    ) -> str:
+    """
+    Generates the main system prompt used during the agent's execution loop.
+    Includes tools, imports, custom functions, AND info about AGENT_OUTPUT_DIR.
+    """
+    output_dir_info = ""
+    output_dir_name = config.AGENT_OUTPUT_DIR_NAME
+    if output_dir_name and config.AGENT_OUTPUT_DIR: # Ensure both are set
+        output_dir_info = f"""
+    - **Saving Files from Python:**
+        - Variables `AGENT_OUTPUT_DIR` (absolute path) and `AGENT_OUTPUT_DIR_NAME` (relative name, e.g., '{output_dir_name}') are available in the Python scope.
+        - **Use these variables** when constructing file paths for saving files generated by your code (e.g., using `matplotlib.pyplot.savefig`, `open()`, pandas `to_csv`, etc.).
+        - Example: `import os; filepath = os.path.join(AGENT_OUTPUT_DIR, 'my_report.csv'); df.to_csv(filepath)` (assuming `os` and `pandas` are imported and `df` exists).
+        - **CRITICAL:** After successfully saving a file *within your Python code*, you **MUST** print a special line to standard output indicating the relative path, formatted *exactly* like this (replace with your actual relative path):
+        `PRINTED_OUTPUT_FILE: {output_dir_name}/your_filename.ext`
+        - This exact format (`PRINTED_OUTPUT_FILE:` followed by a space, then the relative path starting with `{output_dir_name}/`) allows the system to detect the saved file. Only print this line *once per file saved* within a single `execute_python` call. Do not print anything else on this specific line.
+    """
+    else:
+        output_dir_info = """
+    - **Saving Files from Python:** File output directory is not configured. Saving files from Python code using `AGENT_OUTPUT_DIR` is disabled. The `save_file` tool can still be used for text content.
+    """
+
+    # Format tool definitions clearly for the LLM
+    formatted_tool_descriptions = "\n\n".join([
+        f"**Tool: `{t['name']}`**\nDesc: {t['description']}\nInput Schema: {json.dumps(t['input_schema'])}"
+        for t in tool_definitions
+    ]) if tool_definitions else "None"
+
+    auth_imports_list = ", ".join(authorized_imports) if authorized_imports else "None"
+
+    formatted_custom_functions = "**Available Custom Python Functions (callable directly in `execute_python`):**\n" + "\n".join(
+        [f"- `{f['name']}`:\n  {f['description']}" for f in custom_python_functions]
+    ) if custom_python_functions else "**Available Custom Python Functions:**\nNone"
+
+    # Construct the main system prompt
+    prompt = f"""You are an expert research assistant agent designed to operate autonomously. Your goal is to fulfill the user's request by planning, reasoning, and executing actions using the available tools and Python code execution capabilities.
+
+**Core Workflow:**
+1.  **Think:** Analyze the user's request, the current plan, and the history. Decide the next best action. Write down your reasoning before acting (this is internal, you don't explicitly send 'thoughts'). Your thoughts should guide your action choice.
+2.  **Act:** Choose the *single most appropriate* action for this step:
+    *   **Call an LLM Tool:** Use tools like `search`, `update_plan`, `record_findings`, `save_file` (for saving text), or `final_answer`. Select the tool that directly accomplishes the immediate sub-task derived from your thinking. Provide the correct arguments according to the tool's input schema.
+    *   **Execute Python Code:** Use the `execute_python` tool for calculations, data manipulation, logic, calling available custom Python functions, or generating and saving files (like plots, data files). Write clear, executable Python code.
+3.  **Observe:** You will receive the result of your action (tool result or Python stdout/error). Analyze this result.
+4.  **Repeat:** Update your plan (using `update_plan`) and findings (using `record_findings`) based on the observation. Continue the cycle until the user's request is fully addressed or you encounter an unrecoverable error.
+
+**Current Plan:**
+(You should update this using the `update_plan` tool when necessary, based on your progress. Mark steps as complete `- [x]` when done.)
+{PLAN_TEMPLATE}
+
+**Current Findings:**
+(You should update this using the `record_findings` tool as you discover key information.)
+{FINDINGS_TEMPLATE}
+
+**Available LLM Tools:**
+{formatted_tool_descriptions}
+
+**Python Execution (`execute_python` tool):**
+    - Use this tool for custom logic, complex calculations, data processing (e.g., with pandas if imported), file generation, and interacting with available custom functions.
+    - The Python execution environment is stateful: variables and imports persist across `execute_python` calls within the same agent session.
+    - Authorized standard library imports: {auth_imports_list}. You must import them within the code block if needed (e.g., `import math`).
+    - Use `print()` statements within your Python code to output results or status messages that you might need later or that the user should see. Stdout will be returned as the result of the `execute_python` call.
+    {formatted_custom_functions}
+    {output_dir_info}
+**Planning, Findings, and Saving Strategy:**
+    - **Planning:** Start by creating a detailed plan using `update_plan`. Re-evaluate and update the plan using `update_plan` if the situation changes or you gain new insights. Mark steps as complete (`- [x]`) in the plan *only when they are fully done*.
+    - **Saving Text:** Use the `save_file` **tool** when you have *text content* directly available as a string variable that needs to be saved (e.g., a summary you generated).
+    - **Saving Generated Files (Code):** Use `execute_python` (as described in its section) for saving files generated *by code execution*, such as images from `matplotlib`, data files from `pandas`, etc. Remember the exact `PRINTED_OUTPUT_FILE:` requirement for each saved file.
+    - **Findings:** Use `record_findings` incrementally to accumulate important results, conclusions, or data points as you discover them. This builds the final report content.
+    - **Completion:** Use the `final_answer` tool **only** when the entire task is complete and you have recorded all necessary findings. Provide a concise summary of the outcome as the result.
+
+**Important Rules & Guidelines:**
+    - **Reason Step-by-Step:** Always think through the next logical step based on the plan and observations.
+    - **One Action Per Turn:** Typically, call only one tool or execute one block of Python code per turn unless the LLM explicitly allows sequential tool calls (check API docs if applicable, but assume one for now).
+    - **Handle Errors:** If a tool call or code execution returns an error, analyze the error message, adjust your plan if necessary (e.g., try a different approach), and attempt to recover. If blocked, use `final_answer` to report the failure.
+    - **Clarity:** Ensure your plan updates, findings, and final answer are clear and directly address the user's request.
+    - **Conciseness:** While reasoning is internal, keep the *content* provided to tools like `update_plan`, `record_findings`, and `final_answer` focused and relevant. Avoid unnecessary verbosity in tool inputs.
+
+Now, begin! Look at the initial user request and the current plan provided in the message history. Decide your first action based on your reasoning.
+"""
+    return prompt
+
+def get_initial_plan_prompt(custom_python_functions: List[Dict[str, str]]) -> str:
+    """
+    Generates the system prompt specifically for the initial plan generation phase.
+    Focuses the LLM solely on creating the plan using the 'update_plan' tool.
+    """
+    formatted_custom_functions = ""
+    if custom_python_functions:
+        func_descs = []
+        for func_info in custom_python_functions:
+            first_line_doc = func_info['description'].split('\n')[1].strip() if '\n' in func_info['description'] else "Custom function."
+            func_descs.append(f"- `{func_info['name']}`: {first_line_doc} (Available for later execution)")
+        formatted_custom_functions = "**Consider These Available Functions (for later execution steps):**\n" + "\n".join(func_descs)
+    else:
+        formatted_custom_functions = "**Available Custom Python Functions:** None"
+
+    prompt = f"""Your **ONLY** objective right now is to create a detailed, step-by-step plan to address the user's request. You must output this plan using the `update_plan` tool. Do not use any other tools or generate conversational text.
+
+**Plan Requirements:**
+1.  **Format:** Use Markdown checklist format (e.g., `- [ ] Action item`).
+2.  **Checklist Marker:** Every single action item in the plan **MUST** start with the pending marker `- [ ]`. Do **NOT** use the completed marker `- [x]` at this stage. You are outlining *future* actions.
+3.  **Clarity & Specificity:** Break the task into logical, actionable steps. Be specific about what each step entails (e.g., instead of `- [ ] Analyze data`, use `- [ ] Load data using execute_python and pandas`, `- [ ] Calculate correlation using execute_python`).
+4.  **Tool/Function Awareness:** Consider the tools (like `search`, `save_file`, `execute_python`) and custom Python functions that will be available later during execution. Phrase plan steps clearly indicating *how* the step might be achieved. You do **NOT** execute these actions now, only plan them.
+    {formatted_custom_functions}
+5.  **Structure:** Use Markdown headers (`## Phase 1`, `### Sub-task`) for organization if the plan is complex. Nested checklists (`  - [ ] Sub-step`) are allowed.
+6.  **Completeness:** Ensure the plan covers all aspects of the user's request.
+
+**Example Plan Snippet (Illustrative):**
+```markdown
+# Research Plan: Australian Economy Report
+
+## Phase 1: Data Acquisition
+- [ ] Search for official sources of Australian CPI data (e.g., ABS, RBA) using the `search` tool.
+- [ ] Search for official sources of Australian Money Supply data (e.g., RBA M1/M3) using the `search` tool.
+- [ ] Based on search results, identify downloadable data formats (e.g., CSV). If found, plan to download/load using `execute_python`.
+- [ ] If data is only on web pages, plan to extract key figures manually or attempt scraping with `execute_python` (if feasible and permitted).
+
+## Phase 2: Data Processing & Analysis (using `execute_python`)
+- [ ] Load CPI data into a pandas DataFrame.
+- [ ] Load Money Supply data into a pandas DataFrame.
+- [ ] Clean data: handle missing values, ensure consistent date formats.
+- [ ] Align the time series data (e.g., resample to common frequency like monthly or quarterly).
+- [ ] Generate a plot comparing CPI and Money Supply over time using matplotlib.
+- [ ] Save the generated plot to a file (e.g., 'cpi_vs_money_supply.png') and remember to print the 'PRINTED_OUTPUT_FILE:' line.
+
+## Phase 3: Reporting
+- [ ] Summarize the observed trends in CPI and Money Supply using `record_findings`.
+- [ ] Describe the potential relationship or correlation found between the two series using `record_findings`.
+- [ ] Compile the summary, findings, and reference the generated plot into a final report using the `final_answer` tool.
+```
+**(Notice: All items start with `- [ ]` and clearly reference intended tools/methods/functions)**
+
+**Your Task:**
+Analyze the user's request from the initial message. Generate a comprehensive plan following all requirements above. Output the *entire* plan *only* within the `plan_markdown` parameter of the `update_plan` tool call. Do not include any other text outside the tool call. Ensure every action item starts with `- [ ]`.
+"""
+    return prompt
+
+================================================================================
+File: ./agent/__pycache__/tool_manager.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 e1 a5 f7 67 18 24 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00 f3 bc 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 01 6c 02 5a 02 64 00 64 02 6c 03 6d 04 5a 04 6d 05 5a 05 6d 06 5a 06 6d 07 5a 07 6d 08 5a 08 01 00 64 00 64 03
+
+================================================================================
+File: ./agent/__pycache__/code_executor.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 4a f0 e9 67 a5 0d 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00 f3 68 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 01 6c 02 5a 02 64 00 64 02 6c 03 6d 04 5a 04 6d 05 5a 05 01 00 02 00 65 02 6a 06 00 00 00 00 00 00 00 00 65 07
+
+================================================================================
+File: ./agent/__pycache__/state_manager.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 30 c4 f7 67 9f 2e 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00 f3 78 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 02 6c 02 6d 03 5a 03 6d 04 5a 04 6d 05 5a 05 6d 06 5a 06 01 00 64 03 64 04 6c 07 6d 08 5a 08 6d 09 5a 09 01 00
+
+================================================================================
+File: ./agent/__pycache__/prompt.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 26 bb f7 67 0c 1c 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 09 00 00 00 00 00 00 00 f3 aa 00 00 00 97 00 64 00 64 01 6c 00 6d 01 5a 01 6d 02 5a 02 6d 03 5a 03 01 00 64 02 5a 04 64 03 5a 05 64 04 65 01 65 02 65 06 65 03 66 02 19 00 00 00 00 00 00 00 00 00 19 00 00 00 00 00
+
+================================================================================
+File: ./agent/__pycache__/llm.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 2c c3 f7 67 ec 18 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00 f3 7c 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 02 6c 02 6d 03 5a 03 6d 04 5a 04 6d 05 5a 05 01 00 64 00 64 03 6c 06 6d 07 5a 07 6d 08 5a 08 01 00 64 00 64 01
+
+================================================================================
+File: ./agent/__pycache__/agent.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 e8 c1 f7 67 1a 49 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00 f3 00 01 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 01 6c 02 5a 02 64 00 64 01 6c 03 5a 03 64 00 64 01 6c 04 5a 04 64 00 64 02 6c 05 6d 06 5a 06 6d 07 5a 07 6d 08
+
+================================================================================
+File: ./__pycache__/schemas.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 09 63 f7 67 96 02 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 05 00 00 00 00 00 00 00 f3 4a 00 00 00 97 00 64 00 64 01 6c 00 6d 01 5a 01 6d 02 5a 02 01 00 64 00 64 02 6c 03 6d 04 5a 04 6d 05 5a 05 6d 06 5a 06 6d 07 5a 07 01 00 02 00 47 00 64 03 84 00 64 04 65 01 a6 03 00 00
+
+================================================================================
+File: ./__pycache__/main.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 ee c6 f7 67 c8 13 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 06 00 00 00 00 00 00 00 f3 8c 02 00 00 97 00 55 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 01 6c 02 5a 02 64 00 64 01 6c 03 5a 03 64 00 64 01 6c 04 5a 04 64 00 64 02 6c 05 6d 06 5a 06 01 00 64 00
+
+================================================================================
+File: ./__pycache__/config.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 4b a5 f7 67 89 07 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 07 00 00 00 00 00 00 00 f3 0c 03 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 02 6c 01 6d 02 5a 02 01 00 64 00 64 01 6c 03 5a 03 02 00 65 02 a6 00 00 00 ab 00 00 00 00 00 00 00 00 01 00 02 00 65 03 6a 04 00 00
+
+================================================================================
+File: ./__pycache__/agent_utils.cpython-311.pyc
+================================================================================
+
+[Binary file, first 100 bytes shown as hex]
+a7 0d 0d 0a 00 00 00 00 33 85 f7 67 8a 08 00 00 e3 00 00 00 00 00 00 00 00 00 00 00 00 07 00 00 00 00 00 00 00 f3 78 00 00 00 97 00 64 00 64 01 6c 00 5a 00 64 00 64 01 6c 01 5a 01 64 00 64 02 6c 02 6d 02 5a 02 01 00 02 00 65 01 6a 03 00 00 00 00 00 00 00 00 65 04 a6 01 00 00 ab 01 00 00 00 00 00 00
+
+================================================================================
+File: ./static/index.html
+================================================================================
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic Platform V2</title>
+    <!-- DOMPurify for safe HTML rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.5/purify.min.js" integrity="sha512-/Q3v4Ns8jp3R25h1AhQ8SsEs/Wxrcu4wOQCSAkjLqNWQAXqC17lQ+gPIhJZ6njdyM5+RE6Jd7/31qLh4TLx+BA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- Marked for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header id="app-header">
+        <h1>Agent Platform V2</h1>
+    </header>
+
+    <div id="app-container">
+
+        <!-- Input area -->
+        <div class="input-area">
+            <textarea id="task-input" rows="2" placeholder="Enter your request... (e.g., 'Write a report on the Australian economy showing the money supply and the CPI over time')"></textarea>
+            <div class="input-actions">
+                <button id="send-request-button" title="Send Request">▶ Start Request</button>
+                <button id="confirm-plan-button" style="display: none;" title="Confirm Plan & Run">✔ Confirm & Run</button>
+                <button id="stop-button" style="display: none;" title="Stop Execution">⏹ Stop</button>
+            </div>
+             <div id="error-display" class="error-box" style="display: none;"></div>
+        </div>
+
+        <!-- Main 2-Column Layout -->
+        <div id="main-content">
+
+            <!-- Left Column: Interaction Feed (Artifacts) -->
+            <div id="left-column" class="main-column">
+                <div class="column-header">Interaction Feed / Artifacts</div>
+                <div id="chat-feed" class="scrollable-content">
+                    <!-- Populated by JS for 'artifact' type messages -->
+                </div>
+            </div>
+
+            <!-- Right Column: Plan & Findings -->
+            <div id="right-column" class="main-column">
+                 <div class="column-header">Plan & Findings</div>
+                 <div class="scrollable-content">
+                     <div class="output-box" id="plan-box">
+                        <h2 id="plan-title">Plan</h2>
+                        <div id="plan-display" class="content-stream markdown-content"></div> <!-- Changed to div for MD rendering -->
+                        <textarea id="plan-edit-area" class="plan-textarea" style="display: none;"></textarea> <!-- For editing -->
+                     </div>
+                     <div class="output-box" id="findings-box">
+                        <h2>Findings</h2>
+                        <div id="findings-display" class="content-stream markdown-content">
+                           <!-- Populated by JS for 'findings' type messages -->
+                        </div>
+                    </div>
+                 </div>
+            </div>
+
+        </div> <!-- End #main-content -->
+
+        <footer id="app-footer">
+             <div id="status" class="status-box">Status: Idle</div>
+        </footer>
+
+    </div> <!-- End #app-container -->
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
+
+
+================================================================================
+File: ./static/script.js
+================================================================================
+
+// static/script.js (V2 for new spec)
+
+// --- Element Selections ---
+const taskInput = document.getElementById('task-input');
+const sendRequestButton = document.getElementById('send-request-button');
+const confirmPlanButton = document.getElementById('confirm-plan-button');
+const stopButton = document.getElementById('stop-button');
+const statusDisplay = document.getElementById('status');
+const errorDisplay = document.getElementById('error-display');
+const chatFeed = document.getElementById('chat-feed'); // For artifacts
+const planDisplayDiv = document.getElementById('plan-display'); // Div for showing rendered plan
+const planEditArea = document.getElementById('plan-edit-area'); // Textarea for editing plan
+const planTitleElement = document.getElementById('plan-title');
+const findingsDisplay = document.getElementById('findings-display'); // For findings
+
+// --- Globals ---
+let websocket;
+let currentSessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; // Basic unique ID
+let currentTask = '';
+let agentState = 'idle'; // Tracks logical state: idle, planning, confirming, running, stopping, stopped, done, error
+
+// Buffer for accumulating streamed message content
+const messageBuffer = {
+    plan: '',
+    artifact: '',
+    findings: ''
+};
+const contentTypeBuffer = {
+    plan: 'md', // Default plan type
+    artifact: 'text', // Default artifact type
+    findings: 'md' // Default findings type
+};
+
+
+// --- WebSocket Connection ---
+function connectWebSocket() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    console.log(`Connecting WebSocket: ${wsUrl} with SessionID: ${currentSessionId}`);
+    updateStatus("Connecting...");
+    setUILogicalState('connecting');
+
+    // Close existing connection if any
+    if (websocket && websocket.readyState !== WebSocket.CLOSED) {
+        websocket.close();
+    }
+
+
+    websocket = new WebSocket(wsUrl);
+
+    websocket.onopen = () => {
+        console.log("WebSocket Opened");
+        updateStatus("Connected. Ready for request.");
+        setUILogicalState('idle');
+    };
+
+    websocket.onmessage = handleWebSocketMessage;
+
+    websocket.onerror = (event) => {
+        console.error("WebSocket Error:", event);
+        updateError("WebSocket connection error. Please refresh the page.");
+        updateStatus("Error");
+        setUILogicalState('error');
+    };
+
+    websocket.onclose = (event) => {
+        console.log(`WebSocket Closed: Code=${event.code}, Reason='${event.reason}'`);
+        const message = event.reason || `Connection closed (Code: ${event.code})`;
+        // Only show error if connection loss was unexpected
+        if (agentState !== 'done' && agentState !== 'stopped' && agentState !== 'error' && agentState !== 'idle') {
+             updateError(`Connection lost: ${message}. Please refresh.`);
+             updateStatus("Disconnected");
+             setUILogicalState('error'); // Treat unexpected close as error unless done/stopped/idle
+        } else {
+            updateStatus("Disconnected");
+            // If state was idle, stay idle, otherwise might remain done/stopped/error
+            if(agentState !== 'done' && agentState !== 'stopped' && agentState !== 'error') {
+                 setUILogicalState('idle'); // Reset to idle if closed cleanly without active task
+            }
+        }
+    };
+}
+
+// --- Message Handling ---
+function handleWebSocketMessage(event) {
+    // console.debug("WS Received Raw:", event.data);
+    try {
+        const message = JSON.parse(event.data);
+
+        // Basic validation of expected structure from AgentResponse schema
+        if (!message || typeof message !== 'object' || !message.type || !message['content/type'] || typeof message.content === 'undefined') {
+             console.warn("Received invalid message format from agent:", message);
+             addSystemMessage(`Received malformed message from agent.`);
+             return;
+        }
+
+        const type = message.type; // "plan", "artifact", "findings"
+        const contentType = message['content/type'];
+        const contentChunk = message.content;
+        const command = message.command; // "stop" or null
+
+        // Ignore empty chunks unless it's the final stop command
+        if (contentChunk === '' && command !== "stop") {
+            // console.debug(`Ignoring empty chunk for type: ${type}`);
+            return;
+        }
+
+
+        // Append content to the buffer for the specific type
+        // If it's the first chunk for this type since last 'stop', clear previous content
+        if (messageBuffer[type] === '' && contentChunk !== '') {
+             // Potentially clear the display area for this type here? Or wait for stop command?
+             // Let's clear on first non-empty chunk after a stop.
+             clearDisplayArea(type);
+        }
+
+        messageBuffer[type] += contentChunk;
+        contentTypeBuffer[type] = contentType; // Store/update the content type
+
+        // If 'stop' command received, process the complete message from the buffer
+        if (command === "stop") {
+            // console.log(`Stop command received for type: ${type}. Processing buffered content.`);
+            processCompleteMessage(type, contentTypeBuffer[type], messageBuffer[type]);
+            // Clear the buffer for this type *after* processing
+            messageBuffer[type] = '';
+        }
+
+    } catch (e) {
+        console.error("Failed to parse or handle WebSocket message:", e);
+        console.error("Raw data:", event.data);
+        // Display error in UI? Be careful not to flood it.
+        updateError(`Error processing agent message: ${e.message}`);
+    }
+}
+
+function clearDisplayArea(type) {
+    // console.debug(`Clearing display area for type: ${type}`);
+    switch (type) {
+        case 'plan':
+            planDisplayDiv.innerHTML = '';
+            planEditArea.value = ''; // Also clear edit area
+            break;
+        case 'artifact':
+            // Don't clear chat feed, artifacts append
+            break;
+        case 'findings':
+            findingsDisplay.innerHTML = '';
+            break;
+    }
+}
+
+
+function processCompleteMessage(type, contentType, fullContent) {
+    // console.log(`Processing complete message: Type=${type}, ContentType=${contentType}, Length=${fullContent.length}`);
+    // Sanitize content before rendering, especially HTML/Markdown
+
+    // If content is completely empty after buffering, do nothing.
+    if (!fullContent && fullContent !== "") { // Allow explicitly empty string ""
+         console.debug(`Skipping processing of empty buffered content for type: ${type}`);
+         return;
+    }
+
+
+    switch (type) {
+        case 'plan':
+            renderPlan(fullContent, contentType);
+            // If plan is received during planning phase, move to confirmation state
+            if (agentState === 'planning' || agentState === 'initializing') { // Also handle if plan comes very fast
+                 setUILogicalState('confirming');
+                 updateStatus("Plan received. Please review and confirm.");
+            }
+            break;
+        case 'artifact':
+            renderArtifact(fullContent, contentType);
+            break;
+        case 'findings':
+            renderFindings(fullContent, contentType);
+            break;
+        default:
+            console.warn(`Unhandled message type processed: ${type}`);
+    }
+}
+
+
+// --- Rendering Functions ---
+
+function renderPlan(content, contentType) {
+    // console.log("Rendering Plan (contentType:", contentType, ")");
+    planDisplayDiv.innerHTML = ''; // Clear previous plan rendering
+    planDisplayDiv.style.display = 'block';
+    planEditArea.style.display = 'none'; // Hide edit area when displaying rendered plan
+
+    if (contentType === 'md') {
+        try {
+             // Use Marked library (ensure configured with DOMPurify)
+             const dirtyHtml = marked.parse(content || ''); // Handle null/empty content
+             planDisplayDiv.innerHTML = DOMPurify.sanitize(dirtyHtml, { USE_PROFILES: { html: true } });
+             // Add interactivity simulation if needed (e.g., disable checkboxes)
+             planDisplayDiv.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
+        } catch (e) {
+            console.error("Error rendering plan Markdown:", e);
+            planDisplayDiv.textContent = content; // Fallback to text
+        }
+    } else {
+        // Render other content types as plain text in a <pre> tag for formatting
+        const pre = document.createElement('pre');
+        pre.textContent = content;
+        planDisplayDiv.appendChild(pre);
+    }
+    // Store the raw content in the edit area for potential confirmation later
+    planEditArea.value = content;
+    // Scroll plan view to top
+    planDisplayDiv.scrollTop = 0;
+}
+
+function renderFindings(content, contentType) {
+    // console.log("Rendering Findings (contentType:", contentType, ")");
+    if (contentType === 'md') {
+        try {
+            const dirtyHtml = marked.parse(content || '');
+            findingsDisplay.innerHTML = DOMPurify.sanitize(dirtyHtml, { USE_PROFILES: { html: true } });
+        } catch (e) {
+             console.error("Error rendering findings Markdown:", e);
+             findingsDisplay.textContent = content; // Fallback
+        }
+    } else {
+        const pre = document.createElement('pre');
+        pre.textContent = content;
+        findingsDisplay.innerHTML = ''; // Clear previous
+        findingsDisplay.appendChild(pre);
+    }
+    // Scroll findings view to bottom
+    setTimeout(() => { findingsDisplay.scrollTop = findingsDisplay.scrollHeight; }, 50);
+}
+
+function renderArtifact(content, contentType) {
+    // console.log("Rendering Artifact (contentType:", contentType, ")");
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', 'agent-message'); // All artifacts are from agent
+
+    let contentHTML = '';
+    let addAsRawHTML = false; // Flag to bypass escapeHtml for sanitized content
+    let requiresScroll = true; // Assume scroll needed unless it's a short status/thought
+
+    try {
+        // Attempt to render based on content type
+        if (contentType === 'md') {
+            const dirtyHtml = marked.parse(content || '');
+            contentHTML = DOMPurify.sanitize(dirtyHtml, { USE_PROFILES: { html: true } });
+            addAsRawHTML = true; // Content is already sanitized HTML
+        } else if (contentType === 'text/html' || contentType === 'html') {
+             contentHTML = `<div class="preview-container html-preview">${DOMPurify.sanitize(content)}</div>`;
+             addAsRawHTML = true;
+        } else if (contentType === 'image/svg+xml' || contentType === 'svg') {
+             contentHTML = `<div class="preview-container">${DOMPurify.sanitize(content, {USE_PROFILES: {svg: true}})}</div>`;
+             addAsRawHTML = true;
+        } else if (contentType === 'application/json') {
+             // Attempt to parse and format JSON
+             try {
+                 const jsonData = JSON.parse(content);
+                 // Check for specific structured messages (errors, files)
+                 if (jsonData.error) { // Structured Error
+                      contentHTML = `❌ <strong>Agent Error:</strong><pre>${escapeHtml(jsonData.error)}\nDetails: ${escapeHtml(jsonData.details || 'N/A')}</pre>`;
+                      messageDiv.classList.add('message-type-error');
+                 } else if (jsonData.event === 'file_generated' && jsonData.relative_path) { // File from execute_python
+                     const filename = jsonData.relative_path.split('/').pop() || 'file';
+                     const mimeType = jsonData.mime_type || 'application/octet-stream';
+                     const fileLink = `/outputs/${jsonData.relative_path}`;
+                     contentHTML = `📄 <strong>File Generated (Python):</strong> <a href="${fileLink}" target="_blank" rel="noopener noreferrer">${escapeHtml(filename)}</a> (${mimeType})`;
+                     if (mimeType.startsWith('image/')) {
+                          contentHTML += `<div class="preview-container"><img src="${fileLink}" alt="Preview of ${escapeHtml(filename)}" loading="lazy"/></div>`;
+                     } // Add other previews (text, svg?) if possible and desired
+                 } else if (jsonData.status && jsonData.filepath) { // File from save_file tool
+                     const filename = jsonData.filename || jsonData.filepath.split('/').pop();
+                     const fileLink = `/outputs/${jsonData.filepath}`; // Assuming path includes agent_outputs/ prefix
+                     const msg = jsonData.message || (jsonData.status === 'success' ? 'File saved.' : 'File operation failed.');
+
+                     if (jsonData.status === 'success') {
+                         contentHTML = `💾 <strong>${escapeHtml(msg)}</strong> <a href="${fileLink}" target="_blank" rel="noopener noreferrer">${escapeHtml(filename)}</a>`;
+                         // Check for inline preview content
+                         if (jsonData.inline_content) {
+                              const previewContentType = jsonData.content_type || 'text/plain';
+                              if (previewContentType.startsWith('text/')) {
+                                   contentHTML += `<div class="preview-container"><pre>${escapeHtml(jsonData.inline_content)}</pre></div>`;
+                              } else if (previewContentType === 'image/svg+xml') {
+                                   contentHTML += `<div class="preview-container">${DOMPurify.sanitize(jsonData.inline_content, {USE_PROFILES: {svg: true}})}</div>`;
+                                   addAsRawHTML = true; // Need to render SVG part raw
+                              }
+                         } else if (jsonData.content_type?.startsWith('image/')) { // Link preview if no inline content
+                              contentHTML += `<div class="preview-container"><img src="${fileLink}" alt="Preview of ${escapeHtml(filename)}" loading="lazy"/></div>`;
+                         }
+                     } else { // Error status from save_file
+                          contentHTML = `❌ <strong>Save File Error:</strong> ${escapeHtml(msg)} (File: ${escapeHtml(filename)})`;
+                          messageDiv.classList.add('message-type-error');
+                     }
+                 } else { // Generic JSON
+                      contentHTML = `<pre>${escapeHtml(JSON.stringify(jsonData, null, 2))}</pre>`;
+                 }
+             } catch (e) {
+                 console.warn("Could not parse JSON artifact, rendering as text:", e);
+                 contentHTML = `<pre>${escapeHtml(content)}</pre>`; // Fallback for invalid JSON
+             }
+        } else if (contentType.startsWith('image/')) {
+             // Assume content is a URL/path for standard image types if sent directly
+             // (Less likely with current agent logic, but possible)
+             const imageLink = content.startsWith('http') || content.startsWith('/') ? content : `/outputs/${content}`; // Basic assumption
+             contentHTML = `<div class="preview-container"><img src="${escapeHtml(imageLink)}" alt="Agent Image Artifact" loading="lazy"/></div>`;
+        } else if (contentType === 'application/vnd.agent.error+json') { // Handle custom error type stringified
+              try {
+                  const errorData = JSON.parse(content);
+                  contentHTML = `❌ <strong>Agent Error:</strong><pre>${escapeHtml(errorData.error)}\nDetails: ${escapeHtml(errorData.details || 'N/A')}</pre>`;
+                  messageDiv.classList.add('message-type-error');
+              } catch(e) {
+                   contentHTML = `❌ <strong>Agent Error:</strong><pre>${escapeHtml(content)}</pre>`; // Fallback if JSON parse fails
+                   messageDiv.classList.add('message-type-error');
+              }
+        } else { // Default to plain text in pre block
+            contentHTML = `<pre>${escapeHtml(content)}</pre>`;
+            // Add specific classes for thoughts/status/tool calls based on content patterns
+            if (content.startsWith('LLM Thought:')) {
+                 messageDiv.classList.add('message-type-thought');
+                 contentHTML = `🤔 <i>${escapeHtml(content.substring('LLM Thought:'.length).trim())}</i>`;
+                 requiresScroll = false;
+            } else if (content.startsWith('Executing Tool:') || content.startsWith('Executing Python Code:')) {
+                 messageDiv.classList.add('message-type-tool-call');
+                 requiresScroll = false;
+                 // Maybe enhance formatting for code blocks within the pre
+                 if (content.includes('```python')) {
+                     contentHTML = `<pre class="code-block-wrapper">${escapeHtml(content)}</pre>`; // Use a wrapper class
+                 }
+            } else if (content.startsWith('Status:') || content.startsWith('Agent execution') || content.startsWith('Running iteration') || content.startsWith('LLM is thinking') || content.startsWith('Task completed') || content.startsWith('Task failed') || content.startsWith('Task execution stopped')) {
+                 messageDiv.classList.add('message-type-status');
+                 contentHTML = `<i>${escapeHtml(content)}</i>`;
+                 requiresScroll = false;
+            } else {
+                messageDiv.classList.add('message-type-text');
+            }
+        }
+    } catch (renderError) {
+         console.error(`Error rendering artifact (contentType: ${contentType}):`, renderError);
+         contentHTML = `<pre>[Error rendering artifact] ${escapeHtml(content)}</pre>`; // Fallback on rendering error
+    }
+
+
+    if (addAsRawHTML) {
+        messageDiv.innerHTML = contentHTML; // Content is already safe/structured HTML
+    } else {
+        messageDiv.innerHTML = contentHTML; // Assign the generated (potentially escaped) HTML
+        // If we used textContent = contentHTML, it would escape the tags we just created.
+    }
+
+    chatFeed.appendChild(messageDiv);
+
+    // Scroll chat feed to bottom, with a slight delay
+    if (requiresScroll) {
+         setTimeout(() => { chatFeed.scrollTop = chatFeed.scrollHeight; }, 50);
+    }
+}
+
+// --- UI State Management ---
+function setUILogicalState(state) {
+    console.log("Setting UI logical state to:", state);
+    agentState = state; // Update the global state tracker
+
+    // --- Button Visibility and Enabled State ---
+    sendRequestButton.style.display = ['idle', 'stopped', 'done', 'error'].includes(state) ? 'inline-block' : 'none';
+    sendRequestButton.disabled = (state === 'connecting');
+
+    confirmPlanButton.style.display = (state === 'confirming') ? 'inline-block' : 'none';
+    confirmPlanButton.disabled = (state !== 'confirming');
+
+    stopButton.style.display = ['planning', 'confirming', 'running'].includes(state) ? 'inline-block' : 'none'; // Show stop if potentially busy
+    stopButton.disabled = ['stopping', 'stopped', 'done', 'error', 'idle', 'connecting', 'initializing'].includes(state);
+
+    // --- Input Area State ---
+    taskInput.disabled = !['idle', 'stopped', 'done', 'error'].includes(state);
+
+    // --- Plan Area State ---
+    planTitleElement.textContent = 'Plan'; // Default
+    planEditArea.style.display = 'none'; // Hide edit by default
+    planDisplayDiv.style.display = 'block'; // Show display by default
+
+    if (state === 'confirming') {
+        planTitleElement.textContent = 'Plan (Review & Confirm)';
+        planEditArea.style.display = 'block'; // Show editable area
+        planDisplayDiv.style.display = 'none'; // Hide rendered view
+        planEditArea.readOnly = false; // Allow editing
+        planEditArea.focus(); // Focus editor
+    } else if (state === 'running' || state === 'done' || state === 'stopped' || state === 'error') {
+        planTitleElement.textContent = 'Plan (Committed)';
+        planEditArea.readOnly = true; // Show non-editable textarea content if needed? Maybe hide it.
+        // Hide edit area and show display div in terminal states
+        planEditArea.style.display = 'none';
+        planDisplayDiv.style.display = 'block';
+    } else {
+        planEditArea.readOnly = true; // Read-only in other states (like planning, idle)
+    }
+
+    // --- Clear Error on New Interaction Start ---
+    if (state === 'planning' || state === 'idle') {
+        updateError('');
+    }
+
+     // --- Update Main Status Display ---
+     // Handled by updateStatus function now. setUILogicalState focuses on element states.
+}
+
+function updateStatus(message) {
+    if (statusDisplay) statusDisplay.textContent = `Status: ${message}`;
+    // Optionally update logical state based on specific status messages?
+    if (message.includes("completed") || message.includes("Task completed")) {
+        if (agentState !== 'done') setUILogicalState('done');
+    } else if (message.includes("failed") || message.includes("error occurred")) {
+         if (agentState !== 'error') setUILogicalState('error');
+    } else if (message.includes("stopped")) {
+         if (agentState !== 'stopped' && agentState !== 'stopping') setUILogicalState('stopped');
+    }
+}
+
+function updateError(message) {
+    if (!errorDisplay) return;
+    errorDisplay.textContent = message;
+    errorDisplay.style.display = message ? 'block' : 'none';
+    if (message) {
+        // If a significant error occurs, force state to error
+        setUILogicalState('error');
+        updateStatus("Error"); // Update status bar too
+    }
+}
+
+function addSystemMessage(content) { // For messages generated by the UI itself
+     const messageDiv = document.createElement('div');
+     messageDiv.classList.add('message', 'system-message');
+     messageDiv.innerHTML = `<i>${escapeHtml(content)}</i>`;
+     chatFeed.appendChild(messageDiv);
+     setTimeout(() => { chatFeed.scrollTop = chatFeed.scrollHeight; }, 50);
+}
+
+function clearOutputs() {
+    // Don't clear chat feed, it's a log
+    // chatFeed.innerHTML = '';
+    planDisplayDiv.innerHTML = '';
+    planEditArea.value = '';
+    findingsDisplay.innerHTML = '';
+    planTitleElement.textContent = 'Plan';
+    // Don't clear task input here
+    updateError(''); // Clear errors display
+    // Clear buffers
+    messageBuffer.plan = '';
+    messageBuffer.artifact = '';
+    messageBuffer.findings = '';
+    contentTypeBuffer.plan = 'md';
+    contentTypeBuffer.artifact = 'text';
+    contentTypeBuffer.findings = 'md';
+}
+
+// --- HTML Escaping Utility ---
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') {
+        try { unsafe = JSON.stringify(unsafe, null, 2); } catch (e) { unsafe = String(unsafe); }
+    }
+    return unsafe
+         .replace(/&/g, "&amp;") // Must be first
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+// --- Event Listeners ---
+sendRequestButton.addEventListener('click', () => {
+    currentTask = taskInput.value.trim();
+    if (!currentTask) { updateError("Please enter a request."); return; }
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+        updateError("Not connected. Attempting to reconnect...");
+        connectWebSocket(); // Try to reconnect
+        // Maybe disable button briefly and retry sending? For now, user needs to click again.
+        return;
+    }
+    clearOutputs(); // Clear previous run outputs (except chat)
+    addSystemMessage(`Request Sent: "${currentTask}"`); // Add user request to feed
+    updateStatus("Sending request...");
+    setUILogicalState('planning'); // Move to planning state
+    sendWebSocketUserRequest('request', currentTask);
+});
+
+confirmPlanButton.addEventListener('click', () => {
+    const confirmedPlan = planEditArea.value; // Get plan from the editable textarea
+    if (!confirmedPlan) { updateError("Plan cannot be empty."); return; }
+    if (agentState !== 'confirming') {
+        console.warn("Confirm button clicked but not in confirming state.");
+        return; // Avoid sending confirmation if not expected
+    }
+    updateError('');
+    updateStatus("Confirming plan and starting execution...");
+    setUILogicalState('running');
+    // Update the display div with the confirmed plan (render it)
+    renderPlan(confirmedPlan, 'md'); // Render the final confirmed plan
+    planEditArea.style.display = 'none'; // Hide edit area after confirm
+    planDisplayDiv.style.display = 'block';
+    sendWebSocketUserRequest('plan_confirmation', confirmedPlan);
+});
+
+stopButton.addEventListener('click', () => {
+     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+         updateError("Not connected. Cannot send stop command."); return;
+     }
+     // Only send stop if the agent is in a state where it can be stopped
+     if (['planning', 'confirming', 'running'].includes(agentState)) {
+         updateStatus("Sending stop request...");
+         setUILogicalState('stopping'); // Indicate stop request sent
+         sendWebSocketUserRequest('stop', null);
+     } else {
+         console.warn("Stop button clicked but agent not in a stoppable state:", agentState);
+     }
+});
+
+
+// --- Initial Load ---
+document.addEventListener('DOMContentLoaded', () => {
+     console.log("DOM loaded. Initializing...");
+     if (typeof DOMPurify === 'undefined') console.error("DOMPurify library not loaded!");
+     if (typeof marked === 'undefined') console.error("Marked library not loaded!");
+     else {
+         // Configure Marked (optional: set options like GFM, breaks)
+         marked.setOptions({
+             gfm: true,
+             breaks: true,
+             sanitize: false, // IMPORTANT: Rely on DOMPurify for sanitization AFTER parsing
+             // smartypants: true // Optional: Use smart quotes, dashes etc.
+         });
+         console.log("Marked library configured.");
+     }
+     setUILogicalState('connecting');
+     connectWebSocket(); // Initial connection attempt
+});
+
+// --- Utility to Send User Requests ---
+function sendWebSocketUserRequest(type, content) {
+     if (websocket && websocket.readyState === WebSocket.OPEN) {
+         const message = {
+             session_id: currentSessionId,
+             type: type,
+             role: "user",
+             content: content // Content can be null for 'stop'
+         };
+         console.log("Sending User Request:", message);
+         try {
+             websocket.send(JSON.stringify(message));
+         } catch (sendError) {
+             console.error("WebSocket send error:", sendError);
+             updateError("Failed to send message. Connection may be lost.");
+             setUILogicalState('error');
+         }
+     } else {
+         console.error("WebSocket not open. Cannot send user request:", {type, content});
+         updateError("Connection lost. Please refresh the page.");
+         setUILogicalState('error');
+     }
+}
+
+
+================================================================================
+File: ./static/style.css
+================================================================================
+
+/* static/style.css (Adjustments for V2) */
+
+/* --- Google Font Import --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+/* --- Light Theme Variables --- */
+:root {
+    --bg-color-light: #ffffff;
+    --bg-color-medium: #f7f7f8;
+    --bg-color-dark: #f0f0f3; /* Panel/widget backgrounds */
+    --text-color-primary: #1a1a1a;
+    --text-color-secondary: #55555a;
+    --text-color-placeholder: #8a8a93;
+    --accent-color-primary: #0d6efd; /* Blue accent */
+    --accent-color-secondary: #6c757d; /* Grayish accent */
+    --confirm-color: #198754; /* Green */
+    --stop-color: #dc3545; /* Red for stop */
+    --border-color: #e1e1e6;
+    --shadow-color: rgba(0, 0, 0, 0.05);
+    --code-bg: #f8f9fa; /* Lighter code bg for light theme */
+    --code-text: #212529;
+    --code-border: #dee2e6;
+    --error-color: #dc3545;
+    --error-bg: #f8d7da;
+    --findings-bg: #e9f5ff; /* Light blue for findings */
+    --plan-bg: #f0f3f7; /* Slightly different bg for plan */
+    --system-message-color: #6c757d;
+    --thought-bg: #fffbe6;
+    --thought-border: #ffe58f;
+    --tool-call-bg: #f0f0ff;
+    --tool-call-border: #ccccff;
+
+    --header-height: 50px;
+    --input-height: 100px; /* Approximate, can vary */
+    --footer-height: 40px;
+}
+
+/* --- Base & Reset Styles --- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; /* Base font size */ }
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-color-medium);
+    color: var(--text-color-primary);
+    line-height: 1.5;
+    height: 100vh;
+    overflow: hidden; /* Prevent body scroll */
+    display: flex;
+    flex-direction: column;
+}
+h1 { font-size: 1.4rem; font-weight: 600; color: var(--text-color-primary); }
+h2 { font-size: 1.0rem; font-weight: 600; color: var(--text-color-primary); margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); }
+pre, code, textarea { font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; font-size: 0.85rem; }
+button { font-family: 'Inter', sans-serif; cursor: pointer; border-radius: 6px; padding: 6px 12px; border: 1px solid transparent; transition: background-color 0.2s ease, border-color 0.2s ease; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+a { color: var(--accent-color-primary); text-decoration: none;}
+a:hover { text-decoration: underline;}
+
+/* --- App Layout --- */
+#app-header {
+    height: var(--header-height);
+    background-color: var(--bg-color-light);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    flex-shrink: 0; /* Prevent header from shrinking */
+    box-shadow: 0 1px 3px var(--shadow-color);
+    z-index: 10;
+}
+
+#app-container {
+    flex-grow: 1; /* Take remaining vertical space */
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow: hidden; /* Contains child elements */
+}
+
+#app-footer {
+    height: var(--footer-height);
+    background-color: var(--bg-color-light);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+}
+
+/* --- Input Area --- */
+.input-area {
+    background-color: var(--bg-color-light);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 5px var(--shadow-color);
+    display: flex;
+    align-items: flex-start; /* Align items to top */
+    gap: 10px;
+    flex-shrink: 0; /* Prevent input area from shrinking */
+    flex-wrap: wrap; /* Allow error box to wrap */
+}
+.input-area textarea {
+    flex-grow: 1; /* Take available horizontal space */
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background-color: var(--bg-color-light);
+    color: var(--text-color-primary);
+    resize: vertical; /* Allow vertical resize */
+    min-height: 50px;
+    line-height: 1.4;
+}
+.input-area textarea::placeholder { color: var(--text-color-placeholder); }
+.input-area textarea:focus { outline: none; border-color: var(--accent-color-primary); box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25); }
+.input-actions { display: flex; gap: 8px; align-items: center; }
+.input-area button {
+    background-color: var(--accent-color-primary); color: white; border-color: var(--accent-color-primary);
+    font-weight: 500; font-size: 0.9rem; padding: 7px 14px; white-space: nowrap;
+}
+.input-area button:hover:not(:disabled) { background-color: #0b5ed7; border-color: #0a58ca; }
+#confirm-plan-button { background-color: var(--confirm-color); border-color: var(--confirm-color); color: white; }
+#confirm-plan-button:hover:not(:disabled) { background-color: #157347; border-color: #146c43; }
+#stop-button { background-color: var(--stop-color); border-color: var(--stop-color); color: white; }
+#stop-button:hover:not(:disabled) { background-color: #bb2d3b; border-color: #b02a37; }
+
+.error-box {
+    flex-basis: 100%; /* Take full width when wrapping */
+    order: 3; /* Ensure it appears below input/buttons */
+    color: var(--error-color); background-color: var(--error-bg);
+    border: 1px solid var(--error-color); border-radius: 6px; padding: 8px 12px;
+    margin-top: 10px; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word;
+}
+
+/* --- Main Content - 2 Columns --- */
+#main-content {
+    flex-grow: 1; /* Take remaining vertical space */
+    display: flex;
+    gap: 15px;
+    overflow: hidden; /* Contains the scrolling columns */
+}
+.main-column {
+    background-color: var(--bg-color-light);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px var(--shadow-color);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Each column manages its own overflow */
+}
+
+/* --- Column Widths --- */
+#left-column { flex: 1 1 55%; } /* Feed/Artifacts */
+#right-column { flex: 1 1 45%; } /* Plan/Findings */
+
+.column-header {
+    font-weight: 600;
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0; /* Prevent header shrinking */
+    color: var(--text-color-secondary);
+    font-size: 0.9rem;
+    background-color: var(--bg-color-dark);
+}
+.scrollable-content {
+    flex-grow: 1; /* Allow content to take space */
+    overflow-y: auto; /* Enable vertical scroll */
+    padding: 15px;
+}
+/* Style scrollbars */
+.scrollable-content::-webkit-scrollbar { width: 8px; }
+.scrollable-content::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px;}
+.scrollable-content::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px;}
+.scrollable-content::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+
+/* --- Left Column (Chat Feed / Artifacts) Styling --- */
+#chat-feed .message {
+    margin-bottom: 12px;
+    padding: 10px 15px;
+    border-radius: 8px;
+    line-height: 1.4;
+    word-wrap: break-word; /* Ensure long words break */
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-color-light); /* Default agent message bg */
+}
+#chat-feed .system-message { /* For messages added by the UI itself */
+    background-color: transparent;
+    border: none;
+    color: var(--system-message-color);
+    font-style: italic;
+    font-size: 0.9em;
+    padding: 5px 0;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+/* Specific artifact styling */
+#chat-feed .message pre { /* Used for code, JSON, plain text */
+    background-color: var(--code-bg);
+    border: 1px solid var(--code-border);
+    padding: 8px 12px;
+    margin-top: 8px;
+    max-height: 400px; /* Limit height of code/text blocks */
+    overflow: auto;
+    white-space: pre-wrap; /* Wrap long lines */
+    word-wrap: break-word;
+    border-radius: 4px;
+    color: var(--code-text);
+    font-size: 0.85em; /* Slightly smaller font for code */
+}
+#chat-feed .message strong { font-weight: 600; }
+#chat-feed .message i { color: var(--text-color-secondary); } /* Thoughts, status */
+#chat-feed .message-type-error { background-color: var(--error-bg); border-color: var(--error-color); color: var(--error-color); }
+#chat-feed .message-type-error pre { background-color: #f8d7da; border-color: #f5c6cb; color: var(--error-color); }
+#chat-feed .message-type-thought { background-color: var(--thought-bg); border-color: var(--thought-border); }
+#chat-feed .message-type-tool-call { background-color: var(--tool-call-bg); border-color: var(--tool-call-border); }
+#chat-feed .message-type-status { background-color: transparent; border: none; padding: 5px 15px; font-size: 0.9em; color: var(--text-color-secondary); }
+#chat-feed .message-type-text { background-color: #fdfdfe; } /* Very light bg for plain text */
+
+/* Container for previews (images, svg, html snippets) inside artifacts */
+#chat-feed .message .preview-container {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-color-light); /* Light background for previews */
+    max-height: 350px; /* Limit preview height */
+    overflow: auto; /* Allow scrolling if content overflows */
+    display: flex; /* Use flexbox for centering/alignment */
+    justify-content: center;
+    align-items: center;
+}
+#chat-feed .message .preview-container img,
+#chat-feed .message .preview-container svg {
+    max-width: 100%;
+    max-height: 330px; /* Slightly less than container */
+    height: auto;
+    display: block;
+    border-radius: 4px;
+}
+#chat-feed .message .preview-container pre { /* Text preview inside container */
+     max-height: 330px;
+     width: 100%; /* Take full width */
+     margin: 0;
+     background-color: var(--bg-color-light); /* Match container */
+     border-color: #eee;
+}
+#chat-feed .message .html-preview {
+    width: 100%;
+    height: 330px;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+}
+
+
+/* --- Right Column (Plan & Findings) Styling --- */
+#right-column .output-box { margin-bottom: 15px; }
+#right-column .output-box:last-child { margin-bottom: 0; }
+
+/* Common style for markdown rendered content */
+.markdown-content {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+    line-height: 1.6;
+    word-wrap: break-word;
+    min-height: 100px; /* Ensure some minimum height */
+}
+.markdown-content h1, .markdown-content h2, .markdown-content h3 { margin-top: 1em; margin-bottom: 0.5em; padding-bottom: 0.3em; border-bottom: 1px solid #ddd; font-weight: 600; }
+.markdown-content h1 { font-size: 1.2em;}
+.markdown-content h2 { font-size: 1.1em;}
+.markdown-content h3 { font-size: 1.0em;}
+.markdown-content ul, .markdown-content ol { padding-left: 25px; margin-bottom: 1em; }
+.markdown-content li { margin-bottom: 0.4em; }
+/* Specific styling for checklist items generated by Marked */
+.markdown-content li.task-list-item { list-style-type: none; margin-left: -20px; }
+.markdown-content input[type="checkbox"] { margin-right: 8px; vertical-align: middle; cursor: default; } /* Make non-interactive */
+.markdown-content code { background-color: var(--code-bg); padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+.markdown-content pre { background-color: var(--code-bg); border: 1px solid var(--code-border); padding: 10px; border-radius: 4px; overflow: auto;}
+.markdown-content pre code { background-color: transparent; padding: 0; border: none; }
+.markdown-content blockquote { border-left: 4px solid #ccc; padding-left: 10px; color: #666; margin-left: 0; }
+
+
+/* Plan specific styles */
+#plan-box .markdown-content { background-color: var(--plan-bg); }
+.plan-textarea { /* Textarea for editing */
+   width: 100%;
+   min-height: 200px; /* Adjust as needed */
+   resize: vertical;
+   background-color: var(--bg-color-light);
+   color: var(--text-color-primary);
+   border: 1px solid var(--border-color);
+   border-radius: 6px;
+   padding: 10px;
+   line-height: 1.5;
+   font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+   font-size: 0.85rem;
+   margin-top: 5px; /* Add some space above if shown */
+}
+.plan-textarea:focus { outline: none; border-color: var(--accent-color-primary); box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25); }
+.plan-textarea:read-only { background-color: var(--bg-color-dark); opacity: 0.8; cursor: default; }
+
+/* Findings specific styles */
+#findings-box .markdown-content { background-color: var(--findings-bg); }
+
+
+/* --- Footer Status Bar --- */
+.status-box { font-size: 0.85rem; color: var(--text-color-secondary); }
+
+================================================================================
+File: ./templates/findings_template.md
+================================================================================
+
+# Research Findings
+
+## Summary
+*(Agent should summarize key findings here)*
+
+## Details
+*(Agent should list detailed results, observations, or data points)*
+
+## Confidence Score
+*(Agent should assess confidence, e.g., High/Medium/Low)*
+
+================================================================================
+File: ./templates/plan_template.md
+================================================================================
+
+# Research Agent Progress Tracking
+
+## Initial Plan
+- [ ] Analyze user request and define main objectives.
+- [ ] Outline high-level steps needed.
+
+*(Agent will update this structure during execution)*
+```
+
+---
+
+**Python Script to Rebuild Repository (`rebuild_repo.py`)**
+
+```python
+import os
+import re
+import sys
+
+def rebuild_repo_from_file(concatenated_filepath):
+    """
+    Reconstructs a directory structure and files from a specially formatted
+    concatenated text file.
+
+    Args:
+        concatenated_filepath (str): The path to the concatenated file.
+    """
+    print(f"Attempting to rebuild repository from: {concatenated_filepath}")
+
+    if not os.path.exists(concatenated_filepath):
+        print(f"Error: Input file not found at '{concatenated_filepath}'")
+        sys.exit(1)
+
+    current_file_path = None
+    current_file_content = []
+    file_separator = "=" * 80
+    inside_file_block = False
+    files_created = 0
+    dirs_created = 0
+
+    try:
+        with open(concatenated_filepath, 'r', encoding='utf-8') as infile:
+            line_iterator = iter(infile) # Use iterator for lookahead potential
+
+            while True:
+                try:
+                    line = next(line_iterator).rstrip('\r\n')
+
+                    if line == file_separator and not inside_file_block:
+                        # Found the start of a file block header
+                        try:
+                            file_header_line = next(line_iterator).rstrip('\r\n')
+                            separator_line_2 = next(line_iterator).rstrip('\r\n')
+                            blank_line = next(line_iterator).rstrip('\r\n') # Expecting a blank line
+
+                            if file_header_line.startswith("File: ") and separator_line_2 == file_separator and blank_line == "":
+                                # Valid header found
+
+                                # Write the previous file first (if exists)
+                                if current_file_path and current_file_content:
+                                    _write_file_content(current_file_path, "".join(current_file_content))
+                                    files_created += 1
+
+                                # Extract new file path
+                                current_file_path = file_header_line[len("File: "):].strip()
+                                # Remove leading './' if present for os.path functions
+                                if current_file_path.startswith('./'):
+                                    current_file_path = current_file_path[2:]
+                                current_file_content = []
+                                inside_file_block = True
+                                print(f"Found header for: {current_file_path}")
+                            else:
+                                # Invalid header, treat subsequent lines as content of previous file (if any)
+                                if current_file_path and inside_file_block:
+                                    current_file_content.append(line + '\n') # Add the separator we read
+                                    current_file_content.append(file_header_line + '\n') # Add the line after
+                                    current_file_content.append(separator_line_2 + '\n') # Add the line after
+                                    current_file_content.append(blank_line + '\n') # Add the blank line
+
+
+                        except StopIteration:
+                            # End of file reached during header reading
+                            break
+                        except Exception as header_err:
+                            print(f"Error reading header after line '{line}': {header_err}")
+                            # Attempt to continue or break? Let's break for safety.
+                            break
+
+                    elif inside_file_block:
+                        # Accumulate content lines for the current file
+                        current_file_content.append(line + '\n')
+
+                    # Handling the case where content ends exactly at EOF without a final separator
+                    # This will be handled by the final write after the loop exits.
+
+                except StopIteration:
+                    # End of file reached
+                    break
+
+        # Write the very last file captured
+        if current_file_path and current_file_content:
+            _write_file_content(current_file_path, "".join(current_file_content))
+            files_created += 1
+
+        print(f"\nRepository rebuild finished.")
+        print(f"Total files processed/created: {files_created}")
+
+    except FileNotFoundError:
+        print(f"Error: Input file not found at '{concatenated_filepath}'")
+    except Exception as e:
+        print(f"An unexpected error occurred during rebuild: {e}")
+        import traceback
+        traceback.print_exc()
+
+def _write_file_content(file_path, content):
+    """Helper function to write content to a file, creating directories."""
+    print(f"  Creating/writing file: {file_path}")
+    try:
+        # Create necessary directories
+        dir_path = os.path.dirname(file_path)
+        if dir_path and not os.path.exists(dir_path):
+            print(f"    Creating directory: {dir_path}")
+            os.makedirs(dir_path, exist_ok=True)
+
+        # Check if it's a binary placeholder
+        if content.startswith("[Binary file, first 100 bytes shown as hex]"):
+            print(f"    Skipping binary file content reconstruction for: {file_path}")
+            # Write the placeholder text itself instead of actual binary data
+            with open(file_path, 'w', encoding='utf-8') as outfile:
+                outfile.write(content)
+                print(f"    Wrote placeholder text to: {file_path}")
+        else:
+            # Write as text file
+            with open(file_path, 'w', encoding='utf-8') as outfile:
+                 # Remove final newline if it was added artificially by the loop
+                 outfile.write(content.rstrip('\n'))
+
+
+    except OSError as e:
+        print(f"  Error creating directory or writing file '{file_path}': {e}")
+    except Exception as e:
+        print(f"  An unexpected error occurred writing file '{file_path}': {e}")
+
+
+if __name__ == "__main__":
+    input_filename = "repo_export.txt" # Default name of the concatenated file
+    if len(sys.argv) > 1:
+        input_filename = sys.argv[1] # Allow overriding via command line argument
+
+    rebuild_repo_from_file(input_filename)
+```
+
+**How to Use:**
+
+1.  **Save the first block:** Copy the entire content starting from the first `======` line down to the end of the `templates/plan_template.md` content and save it into a plain text file named `repo_export.txt` (or any name you prefer) in an empty directory. Make sure the encoding is UTF-8.
+2.  **Save the second block:** Copy the Python script code and save it as a file named `rebuild_repo.py` in the *same* empty directory where you saved `repo_export.txt`.
+3.  **Run the script:** Open your terminal or command prompt, navigate (`cd`) into that empty directory, and run the script using Python:
+    ```bash
+    python rebuild_repo.py
+    ```
+    If you named the export file differently, provide it as an argument:
+    ```bash
+    python rebuild_repo.py your_export_filename.txt
+    ```
+
+The script will read `repo_export.txt`, parse the file headers and content, create the necessary subdirectories (`agent`, `tools`, `static`, etc.), and write the content into the corresponding files. Binary files like images and `.DS_Store` will be created as text files containing the placeholder message (`[Binary file...]`) as the original binary data cannot be recovered from the hex dump alone.
