@@ -1,0 +1,139 @@
+/* Agent UI Styles */
+:root {
+  --primary-color: #3498db;
+  --secondary-color: #2ecc71;
+  --accent-color: #e74c3c;
+  --background-color: #f8f9fa;
+  --text-color: #333;
+  --border-color: #ddd;
+  --code-bg: #282c34;
+  --code-color: #abb2bf;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #fff;
+}
+
+.header {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+}
+
+h1 {
+  color: var(--primary-color);
+}
+
+/* Form styles */
+#task-form {
+  margin-bottom: 20px;
+}
+
+#task {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  margin-bottom: 10px;
+  font-family: inherit;
+  font-size: 16px;
+  resize: vertical;
+}
+
+.button-container {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  background-color: var(--secondary-color);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+#terminate-button {
+  background-color: var(--accent-color);
+}
+
+/* Output container */
+#output {
+  background-color: var(--background-color);
+  border-radius: 5px;
+  padding: 20px;
+  min-height: 400px;
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  font-family: monospace;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+/* Message types */
+.status {
+  color: var(--primary-color);
+  margin: 5px 0;
+}
+
+.error {
+  color: var(--accent-color);
+  margin: 5px 0;
+  padding: 5px;
+  background-color: rgba(231, 76, 60, 0.1);
+  border-radius: 3px;
+}
+
+.warning {
+  color: #f39c12;
+  margin: 5px 0;
+}
+
+.code {
+  background-color: var(--code-bg);
+  color: var(--code-color);
+  padding: 15px;
+  border-radius: 5px;
+  margin: 10px 0;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.tool-result {
+  background-color: #ecf0f1;
+  padding: 10px;
+  border-radius: 5px;
+  margin: 10px 0;
+  border-left: 4px solid var(--secondary-color);
+}
+
+.final-answer {
+  background-color: #d5f5e3;
+  padding: 15px;
+  border-radius: 5px;
+  margin: 15px 0;
+  font-weight: bold;
+  border-left: 4px solid var(--secondary-color);
+} 

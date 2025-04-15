@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Interface</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Agent Interface</h1>
+    </div>
+    
+    <form id="task-form">
+        <textarea id="task" rows="4" placeholder="Enter your task here..."></textarea>
+        <div class="button-container">
+            <button type="submit" id="submit-button">Run Agent</button>
+            <button type="button" id="terminate-button" disabled>Terminate</button>
+        </div>
+    </form>
+    
+    <div id="output"></div>
+    
+    <script>
+        const outputEl = document.getElementById('output');
+        const taskForm = document.getElementById('task-form');
+        const taskInput = document.getElementById('task');
+        const submitButton = document.getElementById('submit-button');
+        const terminateButton = document.getElementById('terminate-button');
+        
+        let ws = null;
+        const clientId = Date.now().toString();
+        
+        function connectWebSocket() {
+            ws = new WebSocket(`ws://${window.location.host}/ws/${clientId}`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                displayOutput(data);
+                
+                if (data.type === 'execution_complete') {
+                    submitButton.disabled = false;
+                    terminateButton.disabled = true;
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                submitButton.disabled = false;
+                terminateButton.disabled = true;
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                outputEl.innerHTML += `<div class="error">WebSocket error: Connection failed</div>`;
+                submitButton.disabled = false;
+                terminateButton.disabled = true;
+            };
+        }
+        
+        function displayOutput(data) {
+            let outputHtml = '';
+            
+            switch (data.type) {
+                case 'status':
+                    outputHtml = `<div class="status">Status: ${data.content}</div>`;
+                    break;
+                case 'error':
+                    outputHtml = `<div class="error">Error: ${data.content}</div>`;
+                    break;
+                case 'warning':
+                    outputHtml = `<div class="warning">Warning: ${data.content}</div>`;
+                    break;
+                case 'code':
+                    outputHtml = `<div class="code">${escapeHtml(data.content)}</div>`;
+                    break;
+                case 'tool_result':
+                    outputHtml = `<div class="tool-result">
+                        <strong>Tool Result (${data.tool}):</strong> 
+                        ${data.stdout ? `<pre>${escapeHtml(data.stdout)}</pre>` : ''}
+                        ${data.error ? `<div class="error">${escapeHtml(data.error)}</div>` : ''}
+                        ${data.content ? `<div>${escapeHtml(data.content)}</div>` : ''}
+                    </div>`;
+                    break;
+                case 'final_answer':
+                    outputHtml = `<div class="final-answer">Final Answer: ${escapeHtml(data.content)}</div>`;
+                    break;
+                case 'llm_chunk':
+                    outputHtml = `<span>${escapeHtml(data.content)}</span>`;
+                    break;
+                default:
+                    outputHtml = `<div>${JSON.stringify(data)}</div>`;
+            }
+            
+            outputEl.innerHTML += outputHtml;
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+        
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return unsafe;
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+        
+        taskForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const task = taskInput.value.trim();
+            
+            if (!task) {
+                outputEl.innerHTML += `<div class="error">Please enter a task</div>`;
+                return;
+            }
+            
+            outputEl.innerHTML = ''; // Clear previous output
+            submitButton.disabled = true;
+            terminateButton.disabled = false;
+            
+            connectWebSocket();
+            
+            // Allow time for WebSocket to connect
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        command: 'initialize',
+                        task: task
+                    }));
+                } else {
+                    outputEl.innerHTML += `<div class="error">WebSocket connection failed</div>`;
+                    submitButton.disabled = false;
+                    terminateButton.disabled = true;
+                }
+            }, 500);
+        });
+        
+        terminateButton.addEventListener('click', function() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    command: 'terminate'
+                }));
+                ws.close();
+            }
+            submitButton.disabled = false;
+            terminateButton.disabled = true;
+        });
+    </script>
+</body>
+</html> 
