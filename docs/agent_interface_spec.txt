@@ -83,3 +83,23 @@ example:
   "command":"stop"
 }
 
+Types of responses:
+
+{
+    "type": "plan",
+    "content": plan_markdown,
+    "content_type":"md"
+}
+
+{
+    "type": "findings",
+    "content": findings_markdown,
+    "content_type":"md"
+}
+
+{
+    "type": "done",
+    "content": final_answer,
+    "content_type":"text"
+}
+
