@@ -1,55 +1,55 @@
 import inspect
 import json
-import logging
+from researchinc.utils.logging_config import setup_logging
 import random
 from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
-logger = logging.getLogger("CLI_Agent")
+logger = setup_logging()
 
 # Import for type checking only to avoid circular imports
 if TYPE_CHECKING:
     from .code_executor import CodeExecutor
-    from .state_manager import StateManager
+    from .project_manager import ProjectManager
 
 # --- Tool Implementations ---
 
 
 # --- Built-in Tool Implementations ---
 def execute_python_impl(
-    code_executor: "CodeExecutor", state_manager: "StateManager", code: str
+    code_executor: "CodeExecutor", project_manager: "ProjectManager", code: str
 ) -> Dict[str, Any]:
     """
     Implementation for the 'execute_python' tool.
-    Executes the code using CodeExecutor and updates the StateManager's globals.
+    Executes the code using CodeExecutor and updates the ProjectManager's globals.
     """
     logger.info("Executing python code via tool.")
     result = code_executor.execute(code)
     if result.get("updated_globals"):
-        state_manager.update_globals(result["updated_globals"])
+        project_manager.update_globals(result["updated_globals"])
     return {
         "stdout": result["stdout"],
         "error": result["error"],  # Will be None if successful
     }
 
 
-def update_plan_impl(state_manager: "StateManager", plan_markdown: str) -> str:
+async def update_plan_impl(project_manager: "ProjectManager", plan_markdown: str) -> str:
     """Implementation for the 'update_plan' tool."""
     logger.info("Updating plan via tool.")
-    state_manager.update_plan(plan_markdown)
+    await project_manager.update_plan(plan_markdown)
     return "Plan updated successfully."
 
 
-def record_findings_impl(state_manager: "StateManager", findings_markdown: str) -> str:
+async def record_findings_impl(project_manager: "ProjectManager", findings_markdown: str) -> str:
     """Implementation for the 'record_findings' tool."""
     logger.info("Recording findings via tool.")
-    state_manager.update_findings(findings_markdown)
+    await project_manager.update_findings(findings_markdown)
     return "Findings recorded successfully."
 
 
-def final_answer_impl(state_manager: "StateManager", result: Any) -> Any:
+async def final_answer_impl(project_manager: "ProjectManager", result: Any) -> Any:
     """Implementation for the 'final_answer' tool."""
     logger.info(f"Final answer received via tool: {result}")
-    state_manager.set_done(result)
+    await project_manager.set_done(result)
     return result
 
 
@@ -75,12 +75,12 @@ class ToolManager:
 
     def __init__(
         self,
-        state_manager: "StateManager",
+        project_manager: "ProjectManager",
         code_executor: "CodeExecutor",
         allowed_imports: List[str],
     ):
         # No need to import here since we have TYPE_CHECKING imports at the module level
-        self.state_manager = state_manager
+        self.project_manager = project_manager
         self.code_executor = code_executor
         self.allowed_imports = allowed_imports
         self._tools: Dict[str, Callable] = {}
@@ -108,7 +108,7 @@ class ToolManager:
         definitions.append(
             {
                 "name": "execute_python",
-                "description": f"Executes a snippet of Python code. State persists. Allowed imports: {', '.join(self.allowed_imports) or 'None'}. Use print() for output.",
+                "description": f"Executes a snippet of Python code. State persists. Has access to the following imports: datetime, timedelta, pandas. Does not use any other imports. Use print() for output.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -215,7 +215,7 @@ class ToolManager:
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         return self._tool_definitions
 
-    def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
+    async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
         """Finds and executes the appropriate tool implementation."""
         tool_function = self._tool_implementations.get(tool_name)
         if not tool_function:
@@ -228,10 +228,10 @@ class ToolManager:
             # Inject dependencies for built-in tools requiring state/executor
             if tool_name == "execute_python":
                 result = tool_function(
-                    self.code_executor, self.state_manager, **tool_args
+                    self.code_executor, self.project_manager, **tool_args
                 )
             elif tool_name in ["update_plan", "record_findings", "final_answer"]:
-                result = tool_function(self.state_manager, **tool_args)
+                result = await tool_function(self.project_manager, **tool_args)
             else:
                 # Execute custom tools directly
                 result = tool_function(**tool_args)

@@ -29,9 +29,32 @@ You have access to the following tools. Use them strictly according to their des
 
 **Python Execution (`execute_python` tool):**
 - The Python execution environment is stateful. Variables and imports persist across `execute_python` calls within the same task.
-- Only use imports from this allowed list: {auth_imports_list}.
+- You have access to the following imports: datetime, timedelta, pandas. Do not use any other imports.
 - Use `print()` within your Python code to output intermediate results or data you need for subsequent steps. These print outputs will be returned as the observation's 'stdout'.
 - Handle potential errors gracefully within your Python code if possible.
+- This tool provides access to the production database so you can directly access the actual data. Simulation is not required.
+
+You have access to the following Python functions to use in your code:
+
+1. Search on google. Use the local chrome browser to search the web and find information on the given query.
+
+import webbrowser
+import urllib.parse
+
+def search_google(query):
+    # Encode the search query for URL
+    encoded_query = urllib.parse.quote(query)
+    
+    # Construct the Google search URL
+    search_url = "https://www.google.com/search?q=" + encoded_query
+    
+    # Open the URL in Chrome browser
+    # Note: This will use the default browser if Chrome is not set as default
+    webbrowser.get('chrome').open(search_url)
+
+if __name__ == "__main__":
+    # Search for "researchinc"
+    search_google("researchinc")
 
 **Planning and Findings:**
 - Use the `update_plan` tool *at the beginning of each reasoning step* to keep track of your progress using the markdown checklist format.

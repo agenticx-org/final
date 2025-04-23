@@ -1,8 +1,9 @@
 import json
-import logging
-from typing import Any, Dict, List, Optional
-
-logger = logging.getLogger("CLI_Agent")
+from researchinc.utils.logging_config import setup_logging
+from typing import Any, Callable, Dict, List, Optional
+from researchinc.repositories.project_repository import ProjectRepository
+import uuid
+logger = setup_logging()
 
 # Templates
 PLAN_TEMPLATE = """
@@ -31,20 +32,30 @@ FINDINGS_TEMPLATE = """
 *(Agent should assess confidence, e.g., High/Medium/Low)*
 """
 
-
-class StateManager:
+class ProjectManager:
     """Manages the agent's state: history, plan, findings, execution scope."""
 
-    def __init__(self, initial_task: str, system_prompt: str):
-        self.message_history: List[Dict[str, Any]] = [
-            {"role": "user", "content": initial_task}
-        ]
-        self.system_prompt = system_prompt
-        self.plan: str = PLAN_TEMPLATE
-        self.findings: str = FINDINGS_TEMPLATE
+    def __init__(self, initial_task: str, system_prompt: str, project_id: str, callback: Callable[[Dict[str, Any]], None]):
+        self.callback = callback
+        self.project_id = project_id
+        self.project_repository = ProjectRepository()
+        self.project = self.project_repository.get_or_create(project_id)
+        self.message_history = [{"role":"user","content":initial_task}]
+        self.project.system_prompt = system_prompt
+        self.project.plan = PLAN_TEMPLATE
+        self.project.findings = FINDINGS_TEMPLATE
         self.execution_globals: Dict[str, Any] = {}
         self._is_done: bool = False
-        self.final_answer: Optional[Any] = None
+        self.project.final_answer = None
+
+    async def save(self):
+        self.project_repository.put(self.project)
+
+    async def log(self, message: str = "", type: str = "info",  status: str = "inprogress"):
+        # Convert dictionary messages to JSON strings
+        if isinstance(message, dict):
+            message = json.dumps(message)
+        logger.info(message)
 
     def add_message(self, role: str, content: Any):
         """Adds a message (or list of content blocks) to the history."""
@@ -97,23 +108,27 @@ class StateManager:
     def get_system_prompt(self) -> str:
         return self.system_prompt
 
-    def update_plan(self, plan_markdown: str):
-        self.plan = plan_markdown
-        logger.info("Plan updated.")
-        # Print JSON output instead of direct printing
-        print(json.dumps({"type": "plan", "content": self.plan}))
+    async def update_plan(self, plan_markdown: str):
+        self.project.plan = plan_markdown
+        await self.callback({
+            "type": "plan",
+            "content": plan_markdown,
+            "content_type":"md"
+        })
 
     def get_plan(self) -> str:
-        return self.plan
+        return self.project.plan
 
-    def update_findings(self, findings_markdown: str):
-        self.findings = findings_markdown
-        logger.info("Findings updated.")
-        # Print JSON output instead of direct printing
-        print(json.dumps({"type": "findings", "content": self.findings}))
+    async def update_findings(self, findings_markdown: str):
+        self.project.findings = findings_markdown
+        await self.callback({
+            "type": "findings",
+            "content": findings_markdown,
+            "content_type":"md"
+        })
 
     def get_findings(self) -> str:
-        return self.findings
+        return self.project.findings
 
     def update_globals(self, new_globals: Dict[str, Any]):
         self.execution_globals.update(new_globals)
@@ -125,13 +140,27 @@ class StateManager:
         self.execution_globals = initial_globals
         logger.info("Initial execution globals set.")
 
-    def set_done(self, final_answer: Any):
+    async def set_done(self, final_answer: Any):
         self._is_done = True
         self.final_answer = final_answer
+        await self.callback({
+            "type": "done",
+            "content": final_answer,
+            "content_type":"text"
+        })
         logger.info(f"Agent marked as done. Final Answer: {final_answer}")
 
     def check_done(self) -> bool:
         return self._is_done
 
     def get_final_answer(self) -> Optional[Any]:
-        return self.final_answer
+        return self.project.final_answer
+    
+
+    async def log_error(self, message: str):
+        await self.callback({
+            "type": "error",
+            "content": message,
+            "content_type":"text"
+        })
+

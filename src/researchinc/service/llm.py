@@ -8,7 +8,7 @@ from anthropic import Anthropic
 logger = logging.getLogger("CLI_Agent")
 
 
-class LLMInteraction:
+class LLM:
     """Handles communication with the Anthropic API."""
 
     def __init__(self, api_key=None, model_id=None):
@@ -80,7 +80,7 @@ class LLMInteraction:
                     ):
                         yield {
                             "id": llm_call_id,
-                            "type": "llm_chunk",
+                            "type": "message",
                             "content": event.delta.text,
                         }
                     # Handle other event types if needed (e.g., tool_use start/delta/stop)

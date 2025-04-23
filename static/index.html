@@ -29,10 +29,9 @@
         const terminateButton = document.getElementById('terminate-button');
         
         let ws = null;
-        const clientId = Date.now().toString();
         
         function connectWebSocket() {
-            ws = new WebSocket(`ws://${window.location.host}/ws/${clientId}`);
+            ws = new WebSocket(`ws://localhost:8000/ws`);
             
             ws.onopen = () => {
                 console.log('WebSocket connected');
@@ -129,8 +128,8 @@
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
-                        command: 'initialize',
-                        task: task
+                        type: 'request', 
+                        content: task
                     }));
                 } else {
                     outputEl.innerHTML += `<div class="error">WebSocket connection failed</div>`;
@@ -143,6 +142,7 @@
         terminateButton.addEventListener('click', function() {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
+                    type: 'request',
                     command: 'terminate'
                 }));
                 ws.close();

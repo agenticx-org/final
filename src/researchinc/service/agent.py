@@ -1,49 +1,48 @@
 import importlib
 import json
-import logging
 import sys
 import time
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict
+from typing import Callable, Dict, Any, List
+import uuid
+from researchinc.utils.logging_config import setup_logging
+from researchinc.service.code_executor import CodeExecutor
+from researchinc.service.llm import LLM
+from researchinc.service.prompts import get_system_prompt
+from researchinc.service.project_manager import ProjectManager
+from researchinc.service.tools import ToolManager
+import os
 
-from .code_executor import CodeExecutor
-from .llm import LLMInteraction
-from .prompts import get_system_prompt
-from .state_manager import StateManager
-from .tools import ToolManager
+logger = setup_logging()
 
-logger = logging.getLogger("CLI_Agent")
+MODEL_ID = os.getenv("MODEL_ID", "claude-3-7-sonnet-latest")
 
+class AgentService:
+    def __init__(self, callback: Callable[[Dict[str, Any]], None] = None):
+        self.task = None
+        self.authorized_imports = []
+        self.callback = callback
 
-class Agent:
-    """Orchestrates the agent's lifecycle for CLI interaction."""
-
-    def __init__(self, task: str, authorized_imports=None, model_id=None):
-        self.task = task
-        self.authorized_imports = authorized_imports or []
-        self._output_json(
-            {"type": "status", "content": f"Initializing Agent for task: {self.task}"}
-        )
+    async def initialize(self,task:str, project_id:str):
+        self.project_manager = ProjectManager(initial_task=task, system_prompt="Initializing...", 
+            project_id=project_id, callback=self.callback)
+        await self.project_manager.log(message="Initializing Agent")
 
         # Initialize components
         try:
-            self.llm = LLMInteraction(model_id=model_id)
+            self.llm = LLM(model_id=MODEL_ID)
         except ValueError as e:
-            self._output_json(
-                {"type": "error", "content": f"Failed to initialize LLM: {e}"}
-            )
-            sys.exit(1)
-
-        # Init StateManager with temporary prompt
-        self.state_manager = StateManager(
-            initial_task=task, system_prompt="Initializing..."
-        )
+            await self.project_manager.log(message=f"Failed to initialize LLM: {e}", type="error", status="error")
+            return
+        
+        self.project_manager.add_message("user", task)
 
         # Init CodeExecutor with empty dict first
         self.code_executor = CodeExecutor(initial_globals={})
 
         # Init ToolManager, which needs state and code executor
         self.tool_manager = ToolManager(
-            state_manager=self.state_manager,
+            project_manager=self.project_manager,
             code_executor=self.code_executor,
             allowed_imports=self.authorized_imports,
         )
@@ -51,19 +50,15 @@ class Agent:
         # Generate the real system prompt
         tool_definitions = self.tool_manager.get_tool_definitions()
         system_prompt = get_system_prompt(tool_definitions, self.authorized_imports)
-        self.state_manager.system_prompt = system_prompt  # Update state
+        self.project_manager.system_prompt = system_prompt  # Update state
 
         # Prepare and set initial globals for code execution
         initial_globals = self._prepare_initial_globals()
-        self.state_manager.set_initial_globals(initial_globals)  # Set in state
+        self.project_manager.set_initial_globals(initial_globals)  # Set in state
         self.code_executor.globals_locals = initial_globals  # Update executor directly
 
-        self._output_json(
-            {"type": "status", "content": "Agent initialized successfully."}
-        )
-        self._output_json(
-            {"id": "initial", "type": "plan", "content": self.state_manager.get_plan()}
-        )
+        await self.project_manager.log(message="Agent initialized successfully.", type="info", status="ready")
+        await self.project_manager.log(message=self.project_manager.get_plan(), type="plan", status="ready")
 
     def _prepare_initial_globals(self) -> Dict[str, Any]:
         """Prepares the initial global scope for the CodeExecutor."""
@@ -88,27 +83,34 @@ class Agent:
 
         return initial_globals
 
-    def _output_json(self, data: Dict[str, Any]) -> None:
-        """Prints data in a uniform JSON format."""
-        print(json.dumps(data))
+    async def handle_command(self, event: Dict[str, Any]):
+        try:
+            if event.get("type") == "request":
+              await self.start_agent_loop(event)
+        except Exception as e:
+            await self.project_manager.log(message="Error received from agent: " + str(e), type="error")
+    
+    async def start_agent_loop(self, command: Dict[str, Any]):
+        task = command.get("content",None)
+        project_id = command.get("project_id",None)
+        await self.initialize(task, project_id)
+        await self.run()
 
-    def run(self, max_iterations=15):
-        """Runs the agent's main loop for CLI."""
-        self._output_json({"type": "status", "content": "Agent starting run loop..."})
+    async def run(self, max_iterations=20):
+        await self.project_manager.log(message="Agent starting run loop...")
         iterations = 0
 
-        while not self.state_manager.check_done() and iterations < max_iterations:
+        while not self.project_manager.check_done() and iterations < max_iterations:
             iterations += 1
-            self._output_json({"type": "iteration_start", "iteration": iterations})
-            self._output_json({"type": "status", "content": "Preparing LLM request..."})
+            await self.project_manager.log(message="Iteration start: " + str(iterations))
 
             # 1. Get state for LLM
-            messages = self.state_manager.get_history()
-            system_prompt = self.state_manager.get_system_prompt()
+            messages = self.project_manager.get_history()
+            system_prompt = self.project_manager.get_system_prompt()
             tool_definitions = self.tool_manager.get_tool_definitions()
 
             # 2. Call LLM (Streaming)
-            self._output_json({"type": "status", "content": "Calling LLM..."})
+            await self.project_manager.log(message="Calling LLM")
             llm_call_id = None
             final_message = None
             stream_generator = self.llm.generate_response_stream(
@@ -119,7 +121,10 @@ class Agent:
             try:
                 while True:
                     chunk = next(stream_generator)
-                    self._output_json(chunk)  # Output each chunk (llm_chunk or error)
+                    await self.project_manager.log(message=chunk["content"], type=chunk["type"])
+
+                    if chunk["type"] == "error":
+                        await self.project_manager.log_error(message=chunk["content"])
                     # Keep track of the ID from the first chunk
                     if llm_call_id is None and "id" in chunk:
                         llm_call_id = chunk["id"]
@@ -141,69 +146,32 @@ class Agent:
                     final_message = None  # Ensure final_message is None on stream error
 
             # Add LLM call ID to status message for clarity
-            self._output_json(
-                {"id": llm_call_id, "type": "status", "content": "LLM stream finished."}
-            )
+            await self.project_manager.log(message="LLM stream finished.", type="message", status="complete")
 
             # Check if the stream failed or returned empty content
             if final_message is None or final_message.content is None:
-                self._output_json(
-                    {
-                        "id": llm_call_id,  # Add ID
-                        "type": "error",
-                        "content": "LLM stream failed or returned empty content. Terminating.",
-                    }
-                )
+                await self.project_manager.log(message="LLM stream failed or returned empty content. Terminating.", type="error", status="error")
                 break
 
             # Add assistant's *complete* response message to history before processing
             # Important: Use final_message here, which is the complete Anthropic message object
-            self.state_manager.add_assistant_message(final_message.content)
+            self.project_manager.add_assistant_message(final_message.content)
 
             # 3. Process LLM response blocks from the final message
             executed_tool_this_turn = False
             for block in final_message.content:
-                if block.type == "text":
-                    # We no longer output the full thought here, it was streamed as chunks
-                    # self._output_json({"type": "thought", "content": block.text})
-                    pass  # Thought content was already streamed
-
-                elif block.type == "tool_use":
+                if block.type == "tool_use":
                     tool_name = block.name
                     tool_input = block.input
                     tool_use_id = block.id  # Keep the tool_use_id from Anthropic
                     executed_tool_this_turn = True
 
-                    # Log the tool call with the LLM call ID
-                    self._output_json(
-                        {
-                            "id": llm_call_id,
-                            "type": "tool_call",
-                            "tool": tool_name,
-                            "args": tool_input,
-                        }  # Add ID
-                    )
-
-                    # Special handling for code execution
+                    await self.project_manager.log(message=f"Executing tool: {tool_name} with args: {tool_input}", type="tool_call", status="inprogress")
                     if tool_name == "execute_python":
-                        self._output_json(
-                            {
-                                "id": llm_call_id,
-                                "type": "code",
-                                "content": tool_input.get("code", ""),
-                            }  # Add ID
-                        )
-
-                    self._output_json(
-                        {
-                            "id": llm_call_id,
-                            "type": "status",
-                            "content": f"Executing tool: {tool_name}...",
-                        }  # Add ID
-                    )
+                        await self.project_manager.log(message=tool_input.get("code", ""), type="code_execution", status="inprogress")
 
                     # Execute the tool
-                    result = self.tool_manager.execute_tool(tool_name, tool_input)
+                    result = await self.tool_manager.execute_tool(tool_name, tool_input)
 
                     # Determine if result indicates an error
                     is_error = False
@@ -232,11 +200,11 @@ class Agent:
                     else:
                         result_output["content"] = str(result)
 
-                    self._output_json(result_output)
+                    await self.project_manager.log(message=result_output, type="tool_result", status="complete")
 
                     # Add tool result message to state for the *next* LLM call
                     # Use the original tool_use_id provided by Anthropic
-                    self.state_manager.add_tool_result(
+                    self.project_manager.add_tool_result(
                         tool_use_id=tool_use_id,
                         result=result_content_for_llm,  # Send stringified/error detail to LLM
                         is_error=is_error,
@@ -246,58 +214,19 @@ class Agent:
                 not executed_tool_this_turn
                 and final_message.stop_reason == "stop_sequence"  # Use final_message
             ):
-                self._output_json(
-                    {
-                        "id": llm_call_id,  # Add ID
-                        "type": "warning",
-                        "content": "LLM finished turn without using a tool. Task may be stalled.",
-                    }
-                )
+                await self.project_manager.log(message="LLM finished turn without using a tool. Task may be stalled.", type="warning", status="inprogress")
 
-            self._output_json({"type": "iteration_end", "iteration": iterations})
-            # Optional delay
-            time.sleep(0.5)
+            await self.project_manager.log(message="Iteration finished: " + str(iterations))
 
         # Loop finished
         # Add ID 'final' to these terminal messages
-        self._output_json({"id": "final", "type": "execution_complete"})
-        if self.state_manager.check_done():
-            final_answer = self.state_manager.get_final_answer()
-            self._output_json(
-                {"id": "final", "type": "final_answer", "content": final_answer}
-            )
-            self._output_json(
-                {
-                    "id": "final",
-                    "type": "status",
-                    "content": "Task completed successfully.",
-                }
-            )
+        await self.project_manager.log(message="Execution complete", type="info", status="complete")
+        if self.project_manager.check_done():
+            final_answer = self.project_manager.get_final_answer()
+            await self.project_manager.log(message=final_answer, type="findings", status="complete")
         elif iterations >= max_iterations:
-            self._output_json(
-                {
-                    "id": "final",
-                    "type": "error",
-                    "content": "Agent reached maximum iterations.",
-                }
-            )
-            self._output_json(
-                {
-                    "id": "final",
-                    "type": "status",
-                    "content": "Task incomplete (max iterations).",
-                }
-            )
+            await self.project_manager.log(message="Task exceeded maximum iterations.", type="message", status="incomplete")
         else:
-            self._output_json(
-                {
-                    "id": "final",
-                    "type": "warning",
-                    "content": "Agent loop exited unexpectedly.",
-                }
-            )
-            self._output_json(
-                {"id": "final", "type": "status", "content": "Task incomplete."}
-            )
+            await self.project_manager.log(message="Agent loop exited unexpectedly.", type="message", status="error")
 
-        return self.state_manager.get_final_answer()
+        return self.project_manager.get_final_answer()

@@ -2,6 +2,7 @@ import contextlib
 import io
 import logging
 from typing import Any, Dict
+from functools import partial
 
 logger = logging.getLogger("CLI_Agent")
 
@@ -11,6 +12,7 @@ class CodeExecutor:
 
     def __init__(self, initial_globals: Dict[str, Any]):
         self.globals_locals: Dict[str, Any] = initial_globals.copy()
+        
         logger.info(
             f"CodeExecutor initialized with globals: {list(self.globals_locals.keys())}"
         )
